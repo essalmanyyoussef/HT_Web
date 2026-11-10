@@ -1,0 +1,377 @@
+﻿@page "/"
+
+@using HT_Web.Services.State
+@using HT_Web.Models.Traceability
+@using HT_Web.Services.Traceability
+@using MudBlazor
+
+@inject DummyTraceabilityService TraceabilityService
+@inject ApplicationState AppState
+@inject ISnackbar Snackbar
+
+<PageTitle>Harness Traceability</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">
+    Harness Traceability
+</MudText>
+
+<!-- SEARCH SECTION -->
+
+<MudPaper Class="pa-4 mt-4">
+
+    <MudText Typo="Typo.h6" GutterBottom="true">
+        Search Traceability
+    </MudText>
+
+    <MudGrid>
+
+        <MudItem xs="12" md="4">
+
+            <MudText>
+                <b>User</b>
+            </MudText>
+
+            <MudText>
+                @(AppState.CurrentUser?.DisplayName ?? "Loading...")
+            </MudText>
+
+        </MudItem>
+
+        <MudItem xs="12" md="2">
+
+            <MudText>
+                <b>Site</b>
+            </MudText>
+
+            <MudText>
+                @(AppState.CurrentUser?.SelectedSite ?? "MFZ")
+            </MudText>
+
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+
+            <MudText>
+                <b>Label Type</b>
+            </MudText>
+
+            <MudRadioGroup T="bool"
+                           @bind-Value="IsFinalLabel">
+
+                <MudRadio T="bool" Value="true">
+                    Final Label
+                </MudRadio>
+
+                <MudRadio T="bool" Value="false">
+                    Travel Ticket
+                </MudRadio>
+
+            </MudRadioGroup>
+
+        </MudItem>
+
+        <MudItem xs="12">
+
+            <MudCheckBox T="bool"
+                         @bind-Value="IncludeAllErrors">
+
+                Include Errors From All Test Processes
+
+            </MudCheckBox>
+
+        </MudItem>
+
+        <MudItem xs="12" md="9">
+
+            <MudTextField T="string"
+                          Label="Harness Label"
+                          @bind-Value="SearchValue" />
+
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="Search">
+
+                Search
+
+            </MudButton>
+
+            <MudButton Color="Color.Secondary"
+                       Variant="Variant.Outlined"
+                       Class="ms-2">
+
+                Export PDF
+
+            </MudButton>
+
+        </MudItem>
+
+    </MudGrid>
+
+</MudPaper>
+
+<!-- HARNESS INFORMATION -->
+
+<MudText Typo="Typo.h6" Class="mt-4 mb-2">
+    Harness Information
+</MudText>
+
+<MudGrid>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Customer
+            </MudText>
+
+            <MudText Typo="Typo.h6">
+                SUZUKI
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Project
+            </MudText>
+
+            <MudText Typo="Typo.h6">
+                YFA
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Family
+            </MudText>
+
+            <MudText Typo="Typo.h6">
+                MAIN
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Line
+            </MudText>
+
+            <MudText Typo="Typo.h6">
+                L1
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+</MudGrid>
+
+<!-- ERROR SUMMARY -->
+
+<MudText Typo="Typo.h6" Class="mt-4 mb-2">
+    Error Summary
+</MudText>
+
+<MudGrid>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Total Errors
+            </MudText>
+
+            <MudText Typo="Typo.h3" Color="Color.Error">
+                5
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Missing Detection
+            </MudText>
+
+            <MudText Typo="Typo.h3" Color="Color.Warning">
+                3
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                Extra Detection
+            </MudText>
+
+            <MudText Typo="Typo.h3" Color="Color.Info">
+                1
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+
+        <MudPaper Class="pa-4">
+
+            <MudText Typo="Typo.caption">
+                No Continuity
+            </MudText>
+
+            <MudText Typo="Typo.h3" Color="Color.Primary">
+                1
+            </MudText>
+
+        </MudPaper>
+
+    </MudItem>
+
+</MudGrid>
+
+<!-- PROCESS HISTORY -->
+
+<MudPaper Class="pa-4 mt-4">
+
+    <MudText Typo="Typo.h6">
+        Process History
+    </MudText>
+
+    <MudDivider Class="my-2" />
+
+    <MudSimpleTable Dense="true">
+
+        <thead>
+            <tr>
+                <th>Reference</th>
+                <th>Travel Ticket</th>
+                <th>Station</th>
+                <th>Final Label</th>
+                <th>Test Date</th>
+                <th>Hostname</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            @foreach (var row in ProcessHistory)
+            {
+                <tr>
+                    <td>@row.Reference</td>
+                    <td>@row.TravelTicketLabel</td>
+                    <td>@row.Station</td>
+                    <td>@row.FinalLabel</td>
+                    <td>@row.TestDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                    <td>@row.Hostname</td>
+                </tr>
+            }
+
+        </tbody>
+
+    </MudSimpleTable>
+
+</MudPaper>
+
+<!-- ERROR DETAILS -->
+
+<MudPaper Class="pa-4 mt-4">
+
+    <MudText Typo="Typo.h6">
+        Error Details
+    </MudText>
+
+    <MudDivider Class="my-2" />
+
+    <MudSimpleTable Dense="true">
+
+        <thead>
+            <tr>
+                <th>Reference</th>
+                <th>Worker</th>
+                <th>Error Type</th>
+                <th>TMP01</th>
+                <th>TMP02</th>
+                <th>Hostname</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            @foreach (var row in Errors)
+            {
+                <tr>
+                    <td>@row.Reference</td>
+                    <td>@row.WorkerId</td>
+                    <td>@row.ErrorType</td>
+                    <td>@row.Tmp01</td>
+                    <td>@row.Tmp02</td>
+                    <td>@row.Hostname</td>
+                </tr>
+            }
+
+        </tbody>
+
+    </MudSimpleTable>
+
+</MudPaper>
+
+@code
+{
+    private List<TraceabilityRecord> ProcessHistory = new();
+
+    private List<SolvedErrorRecord> Errors = new();
+
+    private string SearchValue = string.Empty;
+
+    private bool IsFinalLabel = true;
+
+    private bool IncludeAllErrors = true;
+
+    protected override void OnInitialized()
+    {
+        ProcessHistory =
+            TraceabilityService.GetTraceability();
+
+        Errors =
+            TraceabilityService.GetErrors();
+    }
+
+    private void Search()
+    {
+        Snackbar.Add(
+            $"Searching for: {SearchValue}",
+            Severity.Success);
+    }
+}

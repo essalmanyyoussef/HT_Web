@@ -1,0 +1,80 @@
+﻿@inherits LayoutComponentBase
+
+@using HT_Web.Theme
+@using HT_Web.Services.State
+@using HT_Web.Services.Authentication
+
+@inject ApplicationState AppState
+@inject IUserAccessService UserAccessService
+
+<MudThemeProvider Theme="@SEWSTheme.Theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+
+    <MudAppBar Elevation="2" Color="Color.Primary">
+
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       OnClick="ToggleDrawer" />
+
+        <MudText Typo="Typo.h6">
+            Harness Traceability
+        </MudText>
+
+        <MudSpacer />
+
+        @if (AppState.CurrentUser is not null)
+        {
+            <MudText Typo="Typo.body1">
+                @AppState.CurrentUser.SelectedSite |
+                @AppState.CurrentUser.DisplayName
+            </MudText>
+        }
+
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen"
+               Variant="DrawerVariant.Responsive"
+               Elevation="2">
+
+        <NavMenu />
+
+    </MudDrawer>
+
+    <MudMainContent>
+
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+
+            @Body
+
+        </MudContainer>
+
+    </MudMainContent>
+
+</MudLayout>
+
+@code
+{
+    private bool _drawerOpen = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AppState.CurrentUser is null)
+        {
+            var user = await UserAccessService.GetCurrentUserAsync();
+
+            if (user is not null)
+            {
+                AppState.SetCurrentUser(user);
+            }
+        }
+    }
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

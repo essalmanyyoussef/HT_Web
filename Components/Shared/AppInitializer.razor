@@ -1,0 +1,18 @@
+﻿@using HT_Web.Services.Authentication
+@using HT_Web.Services.State
+
+@inject IUserAccessService UserAccessService
+@inject ApplicationState AppState
+
+@code
+{
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await UserAccessService.GetCurrentUserAsync();
+
+        if (user != null)
+        {
+            AppState.SetCurrentUser(user);
+        }
+    }
+}

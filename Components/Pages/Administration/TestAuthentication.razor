@@ -1,0 +1,40 @@
+﻿@page "/test-auth"
+
+@using HT_Web.Services.Authentication
+
+@inject AuthenticationApiService AuthenticationApiService
+
+<MudPaper Class="pa-4">
+
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               OnClick="TestApi">
+
+        Test Authentication API
+
+    </MudButton>
+
+    <MudDivider Class="my-4" />
+
+    @foreach (var site in Sites)
+    {
+        <MudText>
+            @site
+        </MudText>
+    }
+
+</MudPaper>
+
+@code
+{
+    private List<string> Sites = new();
+
+    private async Task TestApi()
+    {
+        var result =
+            await AuthenticationApiService
+                  .GetSitesAsync("Youssef Essalmany");
+
+        Sites = result.AccessibleSites;
+    }
+}
