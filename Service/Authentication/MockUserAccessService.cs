@@ -10,11 +10,17 @@ public class MockUserAccessService : IUserAccessService
         {
             DisplayName = "Essalmany, Youssef (Kenitra)",
             Email = "youssef.essalmany@sews-e.com",
-            AccessibleSites = new List<string>
-            {
-                "MFZ"
-            },
+
+            AccessibleSites =
+            [
+                "MFZ",
+                "K1",
+                "K2",
+                "PortSaid"
+            ],
+
             SelectedSite = "MFZ",
+
             IsAdmin = true
         };
 

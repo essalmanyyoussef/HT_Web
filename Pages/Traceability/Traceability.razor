@@ -1,0 +1,473 @@
+﻿@page "/"
+
+@using HT_Web.Services.State
+@using HT_Web.Models.Traceability
+@using HT_Web.Services.Traceability
+@using MudBlazor
+@using HT_Web.Models.Traceability
+
+@inject ITraceabilityService TraceabilityService
+@inject ApplicationState AppState
+@inject ISnackbar Snackbar
+
+<PageTitle>Harness Traceability</PageTitle>
+
+@if (IsLoading)
+{
+    <div class="loading-overlay">
+
+        <MudPaper Class="pa-6 loading-panel">
+
+            <MudProgressCircular Color="Color.Primary"
+                                 Indeterminate="true"
+                                 Size="Size.Large" />
+
+            <MudText Typo="Typo.h5" Class="mt-4">
+                Loading Harness Traceability
+            </MudText>
+
+            <MudText Color="Color.Secondary">
+                Retrieving process history and error details...
+            </MudText>
+
+            <MudProgressLinear Class="mt-4"
+                               Indeterminate="true"
+                               Color="Color.Primary" />
+
+        </MudPaper>
+
+    </div>
+}
+
+<MudText Typo="Typo.h4" GutterBottom="true">
+    Harness Traceability
+</MudText>
+
+<!-- SEARCH SECTION -->
+
+<MudPaper Class="pa-4 mb-3" Elevation="1">
+
+    <MudStack Row="true"
+          Justify="Justify.SpaceBetween"
+          AlignItems="AlignItems.Center"
+          Class="mb-4">
+
+    <MudText Typo="Typo.h5">
+        Search Traceability
+    </MudText>
+
+        <MudChip T="string"
+                 Color="Color.Primary"
+                 Variant="Variant.Filled">
+            @(AppState.CurrentUser?.SelectedSite ?? "MFZ")
+        </MudChip>
+
+
+</MudStack>
+
+    <MudGrid>
+
+        <MudItem xs="12" md="6">
+
+            <MudText Typo="Typo.subtitle2">
+                User
+            </MudText>
+
+            <MudText>
+                @(AppState.CurrentUser?.DisplayName ?? "Loading...")
+            </MudText>
+
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+
+            <MudText Typo="Typo.subtitle2">
+                Site
+            </MudText>
+
+            <MudSelect T="string"
+                       Label="Select Site"
+                       @bind-Value="SelectedSite">
+
+                @if (AppState.CurrentUser is not null)
+                {
+                    @foreach (var site in AppState.CurrentUser.AccessibleSites)
+                    {
+                        <MudSelectItem Value="@site">
+                            @site
+                        </MudSelectItem>
+                    }
+                }
+
+            </MudSelect>
+
+        </MudItem>
+
+        <MudItem xs="12">
+
+            <MudDivider Class="my-3" />
+
+        </MudItem>
+
+        <MudItem xs="12">
+
+            <MudText Typo="Typo.subtitle2">
+                Label Type
+            </MudText>
+
+            <MudRadioGroup T="bool"
+                           @bind-Value="IsFinalLabel">
+
+                <MudRadio T="bool" Value="true">
+                    Final Label
+                </MudRadio>
+
+                <MudRadio T="bool" Value="false">
+                    Travel Ticket
+                </MudRadio>
+
+            </MudRadioGroup>
+
+        </MudItem>
+
+        <MudItem xs="12">
+
+            <MudCheckBox T="bool"
+                         @bind-Value="IncludeAllErrors">
+
+                Electrical Test Process Only
+
+            </MudCheckBox>
+
+        </MudItem>
+
+        <MudItem xs="12">
+
+            <MudTextField T="string"
+                          Label="Harness Label"
+                          Placeholder="Scan or enter Harness S/N"
+                          Variant="Variant.Outlined"
+                          @bind-Value="SearchValue" />
+
+        </MudItem>
+
+        <MudItem xs="12">
+
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       Size="Size.Large"
+                       OnClick="Search">
+
+                Search
+
+            </MudButton>
+
+            <MudButton Color="Color.Secondary"
+                       Variant="Variant.Outlined"
+                       Size="Size.Large"
+                       Class="ms-2">
+
+                Export PDF
+
+            </MudButton>
+
+        </MudItem>
+
+    </MudGrid>
+
+</MudPaper>
+<!-- HARNESS INFORMATION -->
+
+<MudText Typo="Typo.h5" Class="mb-2">
+    Harness Information
+</MudText>
+
+<MudStack Row="true"
+          Wrap="Wrap.Wrap"
+          Spacing="2"
+          Class="mb-4">
+
+    <MudChip T="string" Color="Color.Primary">
+        Customer: SUZUKI
+    </MudChip>
+
+    <MudChip T="string" Color="Color.Info">
+        Project: ENGHEV
+    </MudChip>
+
+    <MudChip T="string" Color="Color.Success">
+        Family: HJB
+    </MudChip>
+
+    <MudChip T="string" Color="Color.Warning">
+        Line: L3
+    </MudChip>
+
+</MudStack>
+<!-- ERROR SUMMARY -->
+
+<MudText Typo="Typo.h5" Class="mb-2">
+    Error Summary
+</MudText>
+
+<MudStack Row="true"
+          Wrap="Wrap.Wrap"
+          Spacing="2"
+          Class="mb-4">
+
+    <MudChip T="string"
+             Color="Color.Error"
+             Variant="Variant.Filled">
+        Total Errors: @Errors.Count
+    </MudChip>
+
+    @if (Errors.Any(x => x.ErrorType == 0))
+    {
+        <MudChip T="string"
+                 Color="Color.Warning">
+            Missing Detection:
+            @Errors.Count(x => x.ErrorType == 0)
+        </MudChip>
+    }
+
+    @if (Errors.Any(x => x.ErrorType == 1))
+    {
+        <MudChip T="string"
+                 Color="Color.Info">
+            Extra Detection:
+            @Errors.Count(x => x.ErrorType == 1)
+        </MudChip>
+    }
+
+    @if (Errors.Any(x => x.ErrorType == 10))
+    {
+        <MudChip T="string"
+                 Color="Color.Primary">
+            No Continuity:
+            @Errors.Count(x => x.ErrorType == 10)
+        </MudChip>
+    }
+
+</MudStack>
+<!-- PROCESS HISTORY -->
+
+<MudPaper Class="pa-4 mt-4">
+
+    <MudText Typo="Typo.h6">
+        Process History
+    </MudText>
+
+    <MudDivider Class="my-2" />
+
+    <MudSimpleTable Dense="true">
+
+        <thead>
+            <tr>
+                <th>Reference</th>
+                <th>Travel Ticket</th>
+                <th>Station</th>
+                <th>2nd Label</th>
+                <th>3rd Travel Ticket</th>
+                <th>4th Travel Ticket</th>
+                <th>Final Label</th>
+                <th>Test Date</th>
+                <th>Reworked</th>
+                <th>Rework ID</th>
+                <th>Hostname</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            @foreach (var row in ProcessHistory)
+            {
+                <tr>
+                    <td>@row.Reference</td>
+                    <td>@row.TravelTicketLabel</td>
+                    <td>@row.Station</td>
+                    <td>@row.SecondLabel</td>
+                    <td>@row.ThirdTravelTicketLabel</td>
+                    <td>@row.FourthTravelTicketLabel</td>
+                    <td>@row.FinalLabel</td>
+                    <td>@row.TestDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                    <td>@row.Reworked</td>
+                    <td>@row.ReworkId</td>
+                    <td>@row.Hostname</td>
+                </tr>
+            }
+
+        </tbody>
+
+    </MudSimpleTable>
+
+</MudPaper>
+
+<!-- ERROR DETAILS -->
+
+<MudPaper Class="pa-4 mt-4">
+
+    <MudText Typo="Typo.h6">
+        Error Details
+    </MudText>
+
+    <MudDivider Class="my-2" />
+
+    <MudSimpleTable Dense="true">
+
+        <thead>
+            <tr>
+                <th>Reference</th>
+                <th>Batch</th>
+                <th>Travel Ticket</th>
+                <th>Worker</th>
+                <th>Error Type</th>
+                <th>TMP01</th>
+                <th>TMP02</th>
+                <th>Object</th>
+                <th>Wire1</th>
+                <th>Wire2</th>
+                <th>Way</th>
+                <th>Start Date</th>
+                <th>End Date</th>
+                <th>Time U</th>
+                <th>CPV1</th>
+                <th>CPV2</th>
+                <th>CPV3</th>
+                <th>CPV4</th>
+                <th>Hostname</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+            @foreach (var row in Errors)
+            {
+                <tr>
+                    <td>@row.Reference</td>
+                    <td>@row.Batch</td>
+                    <td>@row.TravelTicketLabel</td>
+                    <td>@row.WorkerId</td>
+                    <td>@row.ErrorType</td>
+                    <td>@row.Tmp01</td>
+                    <td>@row.Tmp02</td>
+                    <td>@row.Object</td>
+                    <td>@row.Wire1</td>
+                    <td>@row.Wire2</td>
+                    <td>@row.Way</td>
+                    <td>@row.StartDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                    <td>@row.EndDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                    <td>@row.TimeU</td>
+                    <td>@row.CPV1</td>
+                    <td>@row.CPV2</td>
+                    <td>@row.CPV3</td>
+                    <td>@row.CPV4</td>
+                    <td>@row.Hostname</td>
+                </tr>
+            }
+
+        </tbody>
+
+    </MudSimpleTable>
+
+</MudPaper>
+
+@code
+{
+    private List<TraceabilityRecord> ProcessHistory = new();
+
+    private List<SolvedErrorRecord> Errors = new();
+
+    private bool IsLoading = false;
+
+    private string SearchValue = string.Empty;
+
+    private bool IsFinalLabel = true;
+
+    private bool IncludeAllErrors = true;
+
+    private async Task Search()
+    {
+        IsLoading = true;
+
+        try
+        {
+            StateHasChanged();
+
+            var request =
+                new TraceabilitySearchRequest
+                {
+                    SearchValue = SearchValue,
+                    IsFinalLabel = IsFinalLabel,
+                    IncludeAllErrors = IncludeAllErrors,
+                    Site = AppState.CurrentUser?.SelectedSite ?? "MFZ"
+                };
+
+            var result =
+                await TraceabilityService.SearchAsync(request);
+
+            ProcessHistory = result.ProcessHistory;
+
+            Errors = result.Errors;
+
+            Snackbar.Add(
+                $"Process History: {ProcessHistory.Count}",
+                Severity.Success);
+
+            Snackbar.Add(
+                $"Errors: {Errors.Count}",
+                Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(
+                ex.Message,
+                Severity.Error);
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task SiteChanged(string site)
+    {
+        if (AppState.CurrentUser is not null)
+        {
+            AppState.CurrentUser.SelectedSite = site;
+        }
+
+        Snackbar.Add(
+            $"Selected Site: {site}",
+            Severity.Info);
+
+        return Task.CompletedTask;
+    }
+    private string SelectedSite
+    {
+        get
+        {
+            return AppState.CurrentUser?.SelectedSite ?? "MFZ";
+        }
+        set
+        {
+            if (AppState.CurrentUser is not null)
+            {
+                AppState.CurrentUser.SelectedSite = value;
+
+                Snackbar.Add(
+                    $"Selected Site = {value}",
+                    Severity.Info);
+            }
+        }
+    }
+    protected override void OnInitialized()
+    {
+        if (AppState.CurrentUser is not null &&
+            string.IsNullOrWhiteSpace(AppState.CurrentUser.SelectedSite))
+        {
+            AppState.CurrentUser.SelectedSite =
+                AppState.CurrentUser.AccessibleSites.FirstOrDefault() ?? "MFZ";
+        }
+    }
+}

@@ -5,10 +5,12 @@ using HT_Web.Services.State;
 using HT_Web.Services.Authentication;
 using HT_Web.Services.Traceability;
 using HT_Web.Repositories;
+using HT_Web.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddMudServices();
 builder.Services.AddHttpClient();
+builder.Services.AddScoped<SqlConnectionFactory>();
 builder.Services.AddScoped<ApplicationState>();
 builder.Services.AddScoped<AuthenticationApiService>();
 builder.Services.AddScoped<DummyTraceabilityService>();

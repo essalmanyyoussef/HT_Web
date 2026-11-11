@@ -1,24 +1,189 @@
-﻿using HT_Web.Models.Traceability;
+﻿using Dapper;
+using HT_Web.Data;
+using HT_Web.Models.Traceability;
 
 namespace HT_Web.Repositories;
 
 public class TraceabilityRepository : ITraceabilityRepository
 {
-    public Task<List<TraceabilityRecord>> GetTraceabilityByFinalLabelAsync(
-        string finalLabel)
+    private readonly SqlConnectionFactory _connectionFactory;
+
+    public TraceabilityRepository(
+        SqlConnectionFactory connectionFactory)
     {
-        return Task.FromResult(new List<TraceabilityRecord>());
+        _connectionFactory = connectionFactory;
     }
 
-    public Task<List<TraceabilityRecord>> GetTraceabilityByTravelTicketAsync(
-        string travelTicket)
+    public async Task<List<TraceabilityRecord>>
+        GetTraceabilityByFinalLabelAsync(
+            string site,
+            string finalLabel)
     {
-        return Task.FromResult(new List<TraceabilityRecord>());
+        using var connection =
+            _connectionFactory.CreateConnection(site);
+
+        await connection.OpenAsync();
+
+        const string sql =
+        """
+        SELECT DISTINCT
+            Ref             AS Reference,
+            BC              AS TravelTicketLabel,
+            Test            AS Station,
+            IN_Barcode_1    AS SecondLabel,
+            IN_Barcode_2    AS ThirdTravelTicketLabel,
+            IN_Barcode_3    AS FourthTravelTicketLabel,
+            OUT_Barcode     AS FinalLabel,
+            DateEnd         AS TestDate,
+            Rework          AS Reworked,
+            Rework_ID       AS ReworkId,
+            Hostname
+        FROM correlations_trial WITH (NOLOCK)
+        WHERE OUT_Barcode = @FinalLabel
+        """;
+
+        var result =
+            await connection.QueryAsync<TraceabilityRecord>(
+                new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        FinalLabel = finalLabel
+                    },
+                    commandTimeout: 300));
+
+        return result.ToList();
     }
 
-    public Task<List<SolvedErrorRecord>> GetErrorsAsync(
+    public async Task<List<TraceabilityRecord>>
+        GetTraceabilityByTravelTicketAsync(
+            string site,
+            string travelTicket)
+    {
+        using var connection =
+            _connectionFactory.CreateConnection(site);
+
+        await connection.OpenAsync();
+
+        const string sql =
+        """
+        SELECT DISTINCT
+            Ref             AS Reference,
+            BC              AS TravelTicketLabel,
+            Test            AS Station,
+            IN_Barcode_1    AS SecondLabel,
+            IN_Barcode_2    AS ThirdTravelTicketLabel,
+            IN_Barcode_3    AS FourthTravelTicketLabel,
+            OUT_Barcode     AS FinalLabel,
+            DateEnd         AS TestDate,
+            Rework          AS Reworked,
+            Rework_ID       AS ReworkId,
+            Hostname
+        FROM correlations_trial WITH (NOLOCK)
+        WHERE BC = @TravelTicket
+        ORDER BY DateEnd ASC
+        """;
+
+        var result =
+            await connection.QueryAsync<TraceabilityRecord>(
+                new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        TravelTicket = travelTicket
+                    },
+                    commandTimeout: 300));
+
+        return result.ToList();
+    }
+
+    public async Task<List<SolvedErrorRecord>>
+        GetErrorsAsync(
+            string site,
+            string travelTicket)
+    {
+        using var connection =
+            _connectionFactory.CreateConnection(site);
+
+        await connection.OpenAsync();
+
+        System.Diagnostics.Debug.WriteLine(
+            $"Searching Errors By Key = [{travelTicket}]");
+
+        const string sql =
+        """
+    SELECT
+        Ref             AS Reference,
+        Batch,
+        Part            AS TravelTicketLabel,
+        Worker          AS WorkerId,
+        Type            AS ErrorType,
+        Counterpart1    AS Tmp01,
+        Counterpart2    AS Tmp02,
+        Object,
+        Wire1,
+        Wire2,
+        Way,
+        DateBegin       AS StartDate,
+        DateEnd         AS EndDate,
+        TimeU,
+        CPV1,
+        CPV2,
+        CPV3,
+        CPV4,
+        Hostname
+    FROM dbo.solvederrors WITH (NOLOCK)
+    WHERE Part = @TravelTicket
+    ORDER BY DateBegin DESC
+    """;
+
+        var result =
+            await connection.QueryAsync<SolvedErrorRecord>(
+                new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        TravelTicket = travelTicket
+                    },
+                    commandTimeout: 300));
+
+        return result.ToList();
+    }
+
+    public async Task<List<ErrorSearchResult>>
+    GetEtStationsAsync(
+        string site,
         string travelTicket)
     {
-        return Task.FromResult(new List<SolvedErrorRecord>());
+        using var connection =
+            _connectionFactory.CreateConnection(site);
+
+        await connection.OpenAsync();
+
+        const string sql =
+        """
+    SELECT
+        Hostname,
+        DateEnd AS TestDate
+    FROM correlations_trial
+    WHERE BC = @TravelTicket
+    AND (
+        Test LIKE '%ET%'
+        OR Test LIKE '%ELEC%'
+        OR Test LIKE '%ELECTRIC%'
+    )
+    """;
+
+        var result =
+            await connection.QueryAsync<ErrorSearchResult>(
+                new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        TravelTicket = travelTicket
+                    },
+                    commandTimeout: 300));
+
+        return result.ToList();
     }
 }

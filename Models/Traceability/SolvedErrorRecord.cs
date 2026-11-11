@@ -28,5 +28,15 @@ public class SolvedErrorRecord
 
     public DateTime EndDate { get; set; }
 
+    public int TimeU { get; set; }
+
+    public string CPV1 { get; set; } = "";
+
+    public string CPV2 { get; set; } = "";
+
+    public string CPV3 { get; set; } = "";
+
+    public string CPV4 { get; set; } = "";
+
     public string Hostname { get; set; } = "";
 }
