@@ -7,74 +7,109 @@
 @inject ApplicationState AppState
 @inject IUserAccessService UserAccessService
 
-<MudThemeProvider Theme="@SEWSTheme.Theme" />
-<MudDialogProvider />
-<MudSnackbarProvider />
+<MudThemeProvider Theme="@SEWSTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
+<MudDialogProvider CloseButton="true" CloseOnEscapeKey="true" MaxWidth="MaxWidth.Medium" />
+<MudSnackbarProvider AnchorOrigin="SnackbarOrigin.BottomRight" />
 
 <MudLayout>
-
-    <MudAppBar Elevation="2" Color="Color.Primary">
-
-        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+    <MudAppBar Elevation="1" Dense="false" Class="px-4">
+        <MudIconButton Icon="@Icons.Material.Rounded.Menu"
                        Color="Color.Inherit"
                        Edge="Edge.Start"
-                       OnClick="ToggleDrawer" />
+                       OnClick="ToggleDrawer"
+                       Class="mr-2" />
 
-        <MudText Typo="Typo.h6">
-            Harness Traceability
-        </MudText>
+        <MudIcon Icon="@Icons.Material.Rounded.Hub" Size="Size.Large" Class="mr-2" />
+        <div>
+            <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.1;">
+                Harness Traceability
+            </MudText>
+            <MudText Typo="Typo.caption" Style="opacity: 0.75;">
+                SEWS MES Traceability System
+            </MudText>
+        </div>
 
         <MudSpacer />
 
-        @if (AppState.CurrentUser is not null)
+        <!-- Indicateur de site actif -->
+        @if (AppState.CurrentUser != null)
         {
-            <MudText Typo="Typo.body1">
-                @AppState.CurrentUser.SelectedSite |
-                @AppState.CurrentUser.DisplayName
-            </MudText>
+            <MudChip T="string"
+                     Color="Color.Secondary"
+                     Variant="Variant.Filled"
+                     Size="Size.Small"
+                     Icon="@Icons.Material.Rounded.LocationOn"
+                     Class="mr-3 font-weight-bold">
+                @(AppState.CurrentUser.SelectedSite ?? "MFZ")
+            </MudChip>
         }
 
+        <!-- Toggle Mode Sombre -->
+        <MudIconButton Icon="@(_isDarkMode? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
+                       Color="Color.Inherit"
+                       OnClick="ToggleTheme"
+                       Title="Changer de thème"
+                       Class="mr-2" />
+
+        <!-- Menu Profil Utilisateur -->
+        @if (AppState.CurrentUser != null)
+        {
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    <MudAvatar Color="Color.Secondary" Size="Size.Medium" Style="cursor: pointer;">
+                        @(AppState.CurrentUser.DisplayName?.FirstOrDefault().ToString().ToUpper() ?? "U")
+                    </MudAvatar>
+                </ActivatorContent>
+                <ChildContent>
+                    <div class="px-4 py-3" style="min-width: 220px;">
+                        <MudText Typo="Typo.subtitle2" Class="font-weight-bold">
+                            @AppState.CurrentUser.DisplayName
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Site : @(AppState.CurrentUser.SelectedSite ?? "MFZ")
+                        </MudText>
+                    </div>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Rounded.ManageAccounts" Href="/admin">
+                        Administration
+                    </MudMenuItem>
+                </ChildContent>
+            </MudMenu>
+        }
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen"
+               ClipMode="DrawerClipMode.Always"
+               Elevation="1"
                Variant="DrawerVariant.Responsive"
-               Elevation="2">
-
+               Width="260px">
         <NavMenu />
-
     </MudDrawer>
 
-    <MudMainContent>
-
-        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
-
+    <MudMainContent Class="pt-16 px-4 pb-8" Style="background-color: var(--mud-palette-background); min-height: 100vh;">
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
             @Body
-
         </MudContainer>
-
     </MudMainContent>
-
 </MudLayout>
 
-@code
-{
+@code {
     private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
 
     protected override async Task OnInitializedAsync()
     {
-        if (AppState.CurrentUser is null)
+        if (AppState.CurrentUser == null)
         {
             var user = await UserAccessService.GetCurrentUserAsync();
-
-            if (user is not null)
+            if (user != null)
             {
                 AppState.SetCurrentUser(user);
             }
         }
     }
 
-    private void ToggleDrawer()
-    {
-        _drawerOpen = !_drawerOpen;
-    }
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleTheme() => _isDarkMode = !_isDarkMode;
 }
+

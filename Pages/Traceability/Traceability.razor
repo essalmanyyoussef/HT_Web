@@ -4,7 +4,7 @@
 @using HT_Web.Models.Traceability
 @using HT_Web.Services.Traceability
 @using MudBlazor
-@using HT_Web.Models.Traceability
+@using Microsoft.AspNetCore.Components.Web
 
 @inject ITraceabilityService TraceabilityService
 @inject ApplicationState AppState
@@ -12,416 +12,483 @@
 
 <PageTitle>Harness Traceability</PageTitle>
 
-@if (IsLoading)
-{
-    <div class="loading-overlay">
-
-        <MudPaper Class="pa-6 loading-panel">
-
-            <MudProgressCircular Color="Color.Primary"
-                                 Indeterminate="true"
-                                 Size="Size.Large" />
-
-            <MudText Typo="Typo.h5" Class="mt-4">
-                Loading Harness Traceability
-            </MudText>
-
-            <MudText Color="Color.Secondary">
-                Retrieving process history and error details...
-            </MudText>
-
-            <MudProgressLinear Class="mt-4"
-                               Indeterminate="true"
-                               Color="Color.Primary" />
-
-        </MudPaper>
-
+<!-- Loading Overlay -->
+<MudOverlay Visible="@IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
+    <div class="d-flex flex-column align-center">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        <MudText Typo="Typo.h6" Class="mt-3 text-white font-weight-bold">
+            Querying Harness Traceability...
+        </MudText>
     </div>
-}
+</MudOverlay>
 
-<MudText Typo="Typo.h4" GutterBottom="true">
-    Harness Traceability
-</MudText>
+<MudStack Spacing="4">
 
-<!-- SEARCH SECTION -->
+    <!-- 1. SEARCH & SCAN CARD -->
+    <MudCard Elevation="2" Class="rounded-lg">
+        <MudCardHeader Class="pb-1">
+            <CardHeaderAvatar>
+                <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
+                    <MudIcon Icon="@Icons.Material.Rounded.QrCodeScanner" />
+                </MudAvatar>
+            </CardHeaderAvatar>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6" Class="font-weight-bold">
+                    Harness Scan & Search
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Operator: @(AppState.CurrentUser?.DisplayName ?? "User")
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
 
-<MudPaper Class="pa-4 mb-3" Elevation="1">
+        <MudCardContent Class="pt-2">
+            <MudGrid AlignItems="Center">
+                <!-- Site Selector Dropdown (Placed right next to serial number) -->
+                <MudItem xs="12" sm="4" md="3">
+                    <MudSelect T="string"
+                               @bind-Value="SelectedSite"
+                               Label="Site"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Normal"
+                               AnchorOrigin="Origin.BottomCenter"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Rounded.LocationOn"
+                               AdornmentColor="Color.Primary">
+                        @foreach (var site in AvailableSites)
+                        {
+                            <MudSelectItem T="string" Value="@site">@site</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
 
-    <MudStack Row="true"
-          Justify="Justify.SpaceBetween"
-          AlignItems="AlignItems.Center"
-          Class="mb-4">
+                <!-- Serial Number Barcode Input -->
+                <MudItem xs="12" sm="8" md="5">
+                    <MudTextField T="string"
+                                  @bind-Value="SearchValue"
+                                  @ref="_searchInput"
+                                  Label="Harness S/N or Travel Ticket"
+                                  Placeholder="Scan or enter barcode..."
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Normal"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Rounded.QrCodeScanner"
+                                  AdornmentColor="Color.Primary"
+                                  Immediate="true"
+                                  OnKeyDown="HandleKeyDown"
+                                  Class="font-weight-bold text-uppercase" />
+                </MudItem>
 
-    <MudText Typo="Typo.h5">
-        Search Traceability
-    </MudText>
+                <!-- Filter Controls -->
+                <MudItem xs="12" md="4" Class="d-flex flex-column gap-1">
+                    <MudRadioGroup T="bool" @bind-Value="IsFinalLabel" Class="d-flex align-center">
+                        <MudRadio T="bool" Value="@true" Color="Color.Primary" Dense="true">Final Label</MudRadio>
+                        <MudRadio T="bool" Value="@false" Color="Color.Secondary" Dense="true">Travel Ticket</MudRadio>
+                    </MudRadioGroup>
 
-        <MudChip T="string"
-                 Color="Color.Primary"
-                 Variant="Variant.Filled">
-            @(AppState.CurrentUser?.SelectedSite ?? "MFZ")
-        </MudChip>
+                    <MudCheckBox T="bool"
+                                 @bind-Value="IncludeAllErrors"
+                                 Label="Electrical Test Process Only"
+                                 Color="Color.Primary"
+                                 Dense="true"
+                                 Size="Size.Small" />
+                </MudItem>
+            </MudGrid>
+        </MudCardContent>
 
+        <MudCardActions Class="px-4 pb-4 pt-0 d-flex justify-space-between align-center">
+            <div class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Rounded.Search"
+                           OnClick="Search"
+                           Disabled="@(string.IsNullOrWhiteSpace(SearchValue) || IsLoading)">
+                    Search
+                </MudButton>
 
-</MudStack>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Rounded.Clear"
+                           OnClick="ClearSearch"
+                           Disabled="@(string.IsNullOrWhiteSpace(SearchValue) && ProcessHistory.Count == 0)">
+                    Clear
+                </MudButton>
+            </div>
 
-    <MudGrid>
+            @if (ProcessHistory.Count > 0)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Rounded.PictureAsPdf"
+                           OnClick="ExportPdf">
+                    Export PDF
+                </MudButton>
+            }
+        </MudCardActions>
+    </MudCard>
 
-        <MudItem xs="12" md="6">
+    <!-- 2. RESULTS SECTION -->
+    @if (_hasSearched)
+    {
+        <!-- Verdict Banner -->
+        <MudAlert Severity="@(Errors.Count == 0 ? Severity.Success : Severity.Error)"
+                  Variant="Variant.Filled"
+                  Elevation="1"
+                  Class="rounded-lg py-2">
+            <div class="d-flex justify-space-between align-center">
+                <div class="d-flex align-center gap-2">
+                    <MudIcon Icon="@(Errors.Count == 0 ? Icons.Material.Rounded.CheckCircle : Icons.Material.Rounded.Warning)" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                            @(Errors.Count == 0 ? "STATUS: CONFORMANT (PASS)" : $"STATUS: DEFECTS DETECTED ({Errors.Count} ERROR(S))")
+                        </MudText>
+                        <MudText Typo="Typo.caption">
+                            @(Errors.Count == 0 ? "No active defects recorded for this harness." : "Review rework history and error details below.")
+                        </MudText>
+                    </div>
+                </div>
 
-            <MudText Typo="Typo.subtitle2">
-                User
+                <div class="d-none d-sm-flex gap-4">
+                    <MudText Typo="Typo.caption" Class="text-white">
+                        <strong>Customer:</strong> SUZUKI | <strong>Project:</strong> ENGHEV | <strong>Line:</strong> L3
+                    </MudText>
+                </div>
+            </div>
+        </MudAlert>
+
+        <!-- Dynamic Error Cards Strip -->
+        <div class="mt-1">
+            <MudText Typo="Typo.subtitle2" Class="font-weight-bold mb-2 text-muted">
+                Inspection Summary & Defects by Type
             </MudText>
+            <MudGrid Spacing="3">
+                <!-- Total Process Steps Card -->
+                <MudItem xs="6" sm="4" md="3">
+                    <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4" Style="border-left-color: var(--mud-palette-primary) !important;">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Process Steps</MudText>
+                        <MudText Typo="Typo.h5" Class="font-weight-bold">@ProcessHistory.Count</MudText>
+                    </MudPaper>
+                </MudItem>
 
-            <MudText>
-                @(AppState.CurrentUser?.DisplayName ?? "Loading...")
-            </MudText>
+                <!-- Total Errors Card -->
+                <MudItem xs="6" sm="4" md="3">
+                    <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4" Style="@($"border-left-color: {(Errors.Count > 0 ? "var(--mud-palette-error)" : "var(--mud-palette-success)")} !important;")">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Errors</MudText>
+                        <MudText Typo="Typo.h5" Class="font-weight-bold" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)">
+                            @Errors.Count
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
 
-        </MudItem>
-
-        <MudItem xs="12" md="6">
-
-            <MudText Typo="Typo.subtitle2">
-                Site
-            </MudText>
-
-            <MudSelect T="string"
-                       Label="Select Site"
-                       @bind-Value="SelectedSite">
-
-                @if (AppState.CurrentUser is not null)
+                <!-- Dynamic Individual Card for EACH distinct error type detected -->
+                @if (Errors.Count > 0)
                 {
-                    @foreach (var site in AppState.CurrentUser.AccessibleSites)
+                    @foreach (var group in Errors.GroupBy(e => e.ErrorType).OrderBy(g => g.Key))
                     {
-                        <MudSelectItem Value="@site">
-                            @site
-                        </MudSelectItem>
+                        <MudItem xs="6" sm="4" md="3">
+                            <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4" Style="@($"border-left-color: {GetErrorHexColor(group.Key)} !important;")">
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @GetErrorLabel(group.Key)
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetErrorColor(group.Key)" Variant="Variant.Outlined">
+                                        Type @group.Key
+                                    </MudChip>
+                                </div>
+                                <MudText Typo="Typo.h5" Class="font-weight-bold mt-1" Color="@GetErrorColor(group.Key)">
+                                    @group.Count()
+                                </MudText>
+                            </MudPaper>
+                        </MudItem>
                     }
                 }
+            </MudGrid>
+        </div>
 
-            </MudSelect>
+        <!-- 3. EXPANDABLE TABLES (STACKED ONE ON TOP OF THE OTHER) -->
+        <MudExpansionPanels MultiExpansion="true" Elevation="1" Class="rounded-lg mt-2">
 
-        </MudItem>
+            <!-- PANEL 1: PROCESS HISTORY -->
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Rounded.History" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                            Process History
+                        </MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
+                            @ProcessHistory.Count
+                        </MudChip>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    @if (ProcessHistory.Count == 0)
+                    {
+                        <div class="pa-6 text-center text-muted">
+                            <MudIcon Icon="@Icons.Material.Rounded.Info" Size="Size.Large" Class="mb-2" />
+                            <MudText Typo="Typo.body2">No process history found for this reference.</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0" Style="overflow-x: auto;">
+                            <thead>
+                                <tr>
+                                    <th>Reference</th>
+                                    <th>Travel Ticket</th>
+                                    <th>Station</th>
+                                    <th>2nd Label</th>
+                                    <th>3rd Travel Ticket</th>
+                                    <th>4th Travel Ticket</th>
+                                    <th>Final Label</th>
+                                    <th>Test Date</th>
+                                    <th>Reworked</th>
+                                    <th>Rework ID</th>
+                                    <th>Hostname</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in ProcessHistory)
+                                {
+                                    <tr>
+                                        <td><strong>@row.Reference</strong></td>
+                                        <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
+                                        <td>
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@row.Station</MudChip>
+                                        </td>
+                                        <td>@row.SecondLabel</td>
+                                        <td>@row.ThirdTravelTicketLabel</td>
+                                        <td>@row.FourthTravelTicketLabel</td>
+                                        <td><span class="font-monospace">@row.FinalLabel</span></td>
+                                        <td>@row.TestDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                                        <td>
+                                            @if (IsReworked(row.Reworked))
+                                            {
+                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                                    @(row.Reworked?.ToString() ?? "YES")
+                                                </MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
+                                                    @(string.IsNullOrWhiteSpace(row.Reworked?.ToString()) ? "NO" : row.Reworked?.ToString())
+                                                </MudChip>
+                                            }
+                                        </td>
+                                        <td>@(string.IsNullOrWhiteSpace(row.ReworkId?.ToString()) ? "-" : row.ReworkId)</td>
+                                        <td>@row.Hostname</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </ChildContent>
+            </MudExpansionPanel>
 
-        <MudItem xs="12">
+            <!-- PANEL 2: ERROR DETAILS -->
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Rounded.ReportProblem" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                            Error Details
+                        </MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)" Variant="Variant.Filled">
+                            @Errors.Count
+                        </MudChip>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    @if (Errors.Count == 0)
+                    {
+                        <div class="pa-6 text-center text-muted">
+                            <MudIcon Icon="@Icons.Material.Rounded.CheckCircleOutline" Color="Color.Success" Size="Size.Large" Class="mb-2" />
+                            <MudText Typo="Typo.body1" Class="font-weight-bold" Color="Color.Success">
+                                No errors recorded!
+                            </MudText>
+                            <MudText Typo="Typo.caption">This harness has passed all quality checks successfully.</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0" Style="overflow-x: auto;">
+                            <thead>
+                                <tr>
+                                    <th>Reference</th>
+                                    <th>Batch</th>
+                                    <th>Travel Ticket</th>
+                                    <th>Error Type</th>
+                                    <th>Object</th>
+                                    <th>Wire1</th>
+                                    <th>Wire2</th>
+                                    <th>Way</th>
+                                    <th>Start Date</th>
+                                    <th>End Date</th>
+                                    <th>Time U</th>
+                                    <th>CPV1</th>
+                                    <th>CPV2</th>
+                                    <th>CPV3</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in Errors)
+                                {
+                                    <tr>
+                                        <td><strong>@row.Reference</strong></td>
+                                        <td>@row.Batch</td>
+                                        <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
+                                        <td>
+                                            <MudChip T="string"
+                                                     Color="@GetErrorColor(row.ErrorType)"
+                                                     Size="Size.Small"
+                                                     Variant="Variant.Filled">
+                                                @GetErrorLabel(row.ErrorType)
+                                            </MudChip>
+                                        </td>
+                                        <td>@row.Object</td>
+                                        <td>@row.Wire1</td>
+                                        <td>@row.Wire2</td>
+                                        <td>@row.Way</td>
+                                        <td>@row.StartDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                                        <td>@row.EndDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
+                                        <td>@row.TimeU</td>
+                                        <td>@row.CPV1</td>
+                                        <td>@row.CPV2</td>
+                                        <td>@row.CPV3</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </ChildContent>
+            </MudExpansionPanel>
 
-            <MudDivider Class="my-3" />
-
-        </MudItem>
-
-        <MudItem xs="12">
-
-            <MudText Typo="Typo.subtitle2">
-                Label Type
+        </MudExpansionPanels>
+    }
+    else
+    {
+        <!-- 4. EMPTY / READY STATE -->
+        <MudPaper Elevation="0" Class="pa-12 d-flex flex-column align-center justify-center rounded-lg border-2 border-dashed">
+            <MudAvatar Size="Size.Large" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Rounded.QrCodeScanner" Size="Size.Large" />
+            </MudAvatar>
+            <MudText Typo="Typo.h6" Class="font-weight-bold">
+                System Ready for Scanning
             </MudText>
-
-            <MudRadioGroup T="bool"
-                           @bind-Value="IsFinalLabel">
-
-                <MudRadio T="bool" Value="true">
-                    Final Label
-                </MudRadio>
-
-                <MudRadio T="bool" Value="false">
-                    Travel Ticket
-                </MudRadio>
-
-            </MudRadioGroup>
-
-        </MudItem>
-
-        <MudItem xs="12">
-
-            <MudCheckBox T="bool"
-                         @bind-Value="IncludeAllErrors">
-
-                Electrical Test Process Only
-
-            </MudCheckBox>
-
-        </MudItem>
-
-        <MudItem xs="12">
-
-            <MudTextField T="string"
-                          Label="Harness Label"
-                          Placeholder="Scan or enter Harness S/N"
-                          Variant="Variant.Outlined"
-                          @bind-Value="SearchValue" />
-
-        </MudItem>
-
-        <MudItem xs="12">
-
-            <MudButton Color="Color.Primary"
-                       Variant="Variant.Filled"
-                       Size="Size.Large"
-                       OnClick="Search">
-
-                Search
-
-            </MudButton>
-
-            <MudButton Color="Color.Secondary"
-                       Variant="Variant.Outlined"
-                       Size="Size.Large"
-                       Class="ms-2">
-
-                Export PDF
-
-            </MudButton>
-
-        </MudItem>
-
-    </MudGrid>
-
-</MudPaper>
-<!-- HARNESS INFORMATION -->
-
-<MudText Typo="Typo.h5" Class="mb-2">
-    Harness Information
-</MudText>
-
-<MudStack Row="true"
-          Wrap="Wrap.Wrap"
-          Spacing="2"
-          Class="mb-4">
-
-    <MudChip T="string" Color="Color.Primary">
-        Customer: SUZUKI
-    </MudChip>
-
-    <MudChip T="string" Color="Color.Info">
-        Project: ENGHEV
-    </MudChip>
-
-    <MudChip T="string" Color="Color.Success">
-        Family: HJB
-    </MudChip>
-
-    <MudChip T="string" Color="Color.Warning">
-        Line: L3
-    </MudChip>
-
-</MudStack>
-<!-- ERROR SUMMARY -->
-
-<MudText Typo="Typo.h5" Class="mb-2">
-    Error Summary
-</MudText>
-
-<MudStack Row="true"
-          Wrap="Wrap.Wrap"
-          Spacing="2"
-          Class="mb-4">
-
-    <MudChip T="string"
-             Color="Color.Error"
-             Variant="Variant.Filled">
-        Total Errors: @Errors.Count
-    </MudChip>
-
-    @if (Errors.Any(x => x.ErrorType == 0))
-    {
-        <MudChip T="string"
-                 Color="Color.Warning">
-            Missing Detection:
-            @Errors.Count(x => x.ErrorType == 0)
-        </MudChip>
-    }
-
-    @if (Errors.Any(x => x.ErrorType == 1))
-    {
-        <MudChip T="string"
-                 Color="Color.Info">
-            Extra Detection:
-            @Errors.Count(x => x.ErrorType == 1)
-        </MudChip>
-    }
-
-    @if (Errors.Any(x => x.ErrorType == 10))
-    {
-        <MudChip T="string"
-                 Color="Color.Primary">
-            No Continuity:
-            @Errors.Count(x => x.ErrorType == 10)
-        </MudChip>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mt-1" Style="max-width: 480px;">
+                Select your site and scan a harness barcode or enter a serial number above to retrieve its process history and electrical test results.
+            </MudText>
+        </MudPaper>
     }
 
 </MudStack>
-<!-- PROCESS HISTORY -->
 
-<MudPaper Class="pa-4 mt-4">
-
-    <MudText Typo="Typo.h6">
-        Process History
-    </MudText>
-
-    <MudDivider Class="my-2" />
-
-    <MudSimpleTable Dense="true">
-
-        <thead>
-            <tr>
-                <th>Reference</th>
-                <th>Travel Ticket</th>
-                <th>Station</th>
-                <th>2nd Label</th>
-                <th>3rd Travel Ticket</th>
-                <th>4th Travel Ticket</th>
-                <th>Final Label</th>
-                <th>Test Date</th>
-                <th>Reworked</th>
-                <th>Rework ID</th>
-                <th>Hostname</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            @foreach (var row in ProcessHistory)
-            {
-                <tr>
-                    <td>@row.Reference</td>
-                    <td>@row.TravelTicketLabel</td>
-                    <td>@row.Station</td>
-                    <td>@row.SecondLabel</td>
-                    <td>@row.ThirdTravelTicketLabel</td>
-                    <td>@row.FourthTravelTicketLabel</td>
-                    <td>@row.FinalLabel</td>
-                    <td>@row.TestDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
-                    <td>@row.Reworked</td>
-                    <td>@row.ReworkId</td>
-                    <td>@row.Hostname</td>
-                </tr>
-            }
-
-        </tbody>
-
-    </MudSimpleTable>
-
-</MudPaper>
-
-<!-- ERROR DETAILS -->
-
-<MudPaper Class="pa-4 mt-4">
-
-    <MudText Typo="Typo.h6">
-        Error Details
-    </MudText>
-
-    <MudDivider Class="my-2" />
-
-    <MudSimpleTable Dense="true">
-
-        <thead>
-            <tr>
-                <th>Reference</th>
-                <th>Batch</th>
-                <th>Travel Ticket</th>
-                <th>Worker</th>
-                <th>Error Type</th>
-                <th>TMP01</th>
-                <th>TMP02</th>
-                <th>Object</th>
-                <th>Wire1</th>
-                <th>Wire2</th>
-                <th>Way</th>
-                <th>Start Date</th>
-                <th>End Date</th>
-                <th>Time U</th>
-                <th>CPV1</th>
-                <th>CPV2</th>
-                <th>CPV3</th>
-                <th>CPV4</th>
-                <th>Hostname</th>
-            </tr>
-        </thead>
-
-        <tbody>
-
-            @foreach (var row in Errors)
-            {
-                <tr>
-                    <td>@row.Reference</td>
-                    <td>@row.Batch</td>
-                    <td>@row.TravelTicketLabel</td>
-                    <td>@row.WorkerId</td>
-                    <td>@row.ErrorType</td>
-                    <td>@row.Tmp01</td>
-                    <td>@row.Tmp02</td>
-                    <td>@row.Object</td>
-                    <td>@row.Wire1</td>
-                    <td>@row.Wire2</td>
-                    <td>@row.Way</td>
-                    <td>@row.StartDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
-                    <td>@row.EndDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
-                    <td>@row.TimeU</td>
-                    <td>@row.CPV1</td>
-                    <td>@row.CPV2</td>
-                    <td>@row.CPV3</td>
-                    <td>@row.CPV4</td>
-                    <td>@row.Hostname</td>
-                </tr>
-            }
-
-        </tbody>
-
-    </MudSimpleTable>
-
-</MudPaper>
-
-@code
-{
+@code {
+    private MudTextField<string>? _searchInput;
     private List<TraceabilityRecord> ProcessHistory = new();
-
     private List<SolvedErrorRecord> Errors = new();
-
     private bool IsLoading = false;
-
+    private bool _hasSearched = false;
     private string SearchValue = string.Empty;
-
     private bool IsFinalLabel = true;
-
     private bool IncludeAllErrors = true;
+    private string _selectedSite = "MFZ";
+
+    // Dynamic Site List with fallback
+    private List<string> AvailableSites
+    {
+        get
+        {
+            var userSites = AppState.CurrentUser?.AccessibleSites;
+            if (userSites != null && userSites.Count > 0)
+            {
+                return userSites;
+            }
+            return new List<string> { "MFZ", "AFZ", "EZZ", "BP" };
+        }
+    }
+
+    private string SelectedSite
+    {
+        get => !string.IsNullOrEmpty(_selectedSite) ? _selectedSite : (AppState.CurrentUser?.SelectedSite ?? "MFZ");
+        set
+        {
+            _selectedSite = value;
+            if (AppState.CurrentUser is not null)
+            {
+                AppState.CurrentUser.SelectedSite = value;
+            }
+            Snackbar.Add($"Selected site: {value}", Severity.Info);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        if (AppState.CurrentUser is not null && !string.IsNullOrWhiteSpace(AppState.CurrentUser.SelectedSite))
+        {
+            _selectedSite = AppState.CurrentUser.SelectedSite;
+        }
+        else
+        {
+            _selectedSite = AvailableSites.FirstOrDefault() ?? "MFZ";
+            if (AppState.CurrentUser is not null)
+            {
+                AppState.CurrentUser.SelectedSite = _selectedSite;
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _searchInput != null)
+        {
+            await _searchInput.FocusAsync();
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(SearchValue) && !IsLoading)
+        {
+            await Search();
+        }
+    }
 
     private async Task Search()
     {
+        if (string.IsNullOrWhiteSpace(SearchValue))
+            return;
+
         IsLoading = true;
+        _hasSearched = true;
 
         try
         {
             StateHasChanged();
+            var request = new TraceabilitySearchRequest
+            {
+                SearchValue = SearchValue.Trim(),
+                IsFinalLabel = IsFinalLabel,
+                IncludeAllErrors = IncludeAllErrors,
+                Site = SelectedSite
+            };
 
-            var request =
-                new TraceabilitySearchRequest
-                {
-                    SearchValue = SearchValue,
-                    IsFinalLabel = IsFinalLabel,
-                    IncludeAllErrors = IncludeAllErrors,
-                    Site = AppState.CurrentUser?.SelectedSite ?? "MFZ"
-                };
+            var result = await TraceabilityService.SearchAsync(request);
+            ProcessHistory = result.ProcessHistory ?? new();
+            Errors = result.Errors ?? new();
 
-            var result =
-                await TraceabilityService.SearchAsync(request);
-
-            ProcessHistory = result.ProcessHistory;
-
-            Errors = result.Errors;
-
-            Snackbar.Add(
-                $"Process History: {ProcessHistory.Count}",
-                Severity.Success);
-
-            Snackbar.Add(
-                $"Errors: {Errors.Count}",
-                Severity.Success);
+            if (Errors.Count > 0)
+            {
+                Snackbar.Add($"{Errors.Count} defect(s) detected on this harness!", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add($"Harness conformant ({ProcessHistory.Count} process steps found)", Severity.Success);
+            }
         }
         catch (Exception ex)
         {
-            Snackbar.Add(
-                ex.Message,
-                Severity.Error);
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
         finally
         {
@@ -430,44 +497,49 @@
         }
     }
 
-    private Task SiteChanged(string site)
+    private void ClearSearch()
     {
-        if (AppState.CurrentUser is not null)
-        {
-            AppState.CurrentUser.SelectedSite = site;
-        }
-
-        Snackbar.Add(
-            $"Selected Site: {site}",
-            Severity.Info);
-
-        return Task.CompletedTask;
+        SearchValue = string.Empty;
+        ProcessHistory.Clear();
+        Errors.Clear();
+        _hasSearched = false;
+        _searchInput?.FocusAsync();
     }
-    private string SelectedSite
+
+    private void ExportPdf()
     {
-        get
-        {
-            return AppState.CurrentUser?.SelectedSite ?? "MFZ";
-        }
-        set
-        {
-            if (AppState.CurrentUser is not null)
-            {
-                AppState.CurrentUser.SelectedSite = value;
+        Snackbar.Add("Generating PDF report...", Severity.Info);
+    }
 
-                Snackbar.Add(
-                    $"Selected Site = {value}",
-                    Severity.Info);
-            }
-        }
-    }
-    protected override void OnInitialized()
+    private static bool IsReworked(object? val)
     {
-        if (AppState.CurrentUser is not null &&
-            string.IsNullOrWhiteSpace(AppState.CurrentUser.SelectedSite))
-        {
-            AppState.CurrentUser.SelectedSite =
-                AppState.CurrentUser.AccessibleSites.FirstOrDefault() ?? "MFZ";
-        }
+        if (val is null) return false;
+        if (val is bool b) return b;
+        var s = val.ToString()?.Trim().ToUpperInvariant();
+        return s == "Y" || s == "YES" || s == "TRUE" || s == "1" || s == "OUI";
     }
+
+    private static Color GetErrorColor(int errorType) => errorType switch
+    {
+        0 => Color.Error,
+        1 => Color.Warning,
+        10 => Color.Info,
+        _ => Color.Default
+    };
+
+    private static string GetErrorHexColor(int errorType) => errorType switch
+    {
+        0 => "#EF4444",
+        1 => "#F59E0B",
+        10 => "#3B82F6",
+        _ => "#64748B"
+    };
+
+    private static string GetErrorLabel(int errorType) => errorType switch
+    {
+        0 => "Missing (0)",
+        1 => "Extra (1)",
+        10 => "No Continuity (10)",
+        _ => $"Type {errorType}"
+    };
 }

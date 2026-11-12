@@ -1,37 +1,39 @@
-﻿<MudNavMenu>
-
-    <MudText Class="pa-4"
-             Typo="Typo.h6">
-
+﻿<div class="pa-4 d-flex align-center">
+    <MudIcon Icon="@Icons.Material.Rounded.AccountTree" Color="Color.Primary" Class="mr-2" />
+    <MudText Typo="Typo.subtitle1" Class="font-weight-bold" Color="Color.Primary">
         Navigation
-
     </MudText>
+</div>
 
-    <MudDivider />
+<MudDivider Class="mb-2" />
 
-
+<MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
+    <MudText Typo="Typo.overline" Class="px-3 text-muted">Opérations</MudText>
 
     <MudNavLink Href="/"
-                Icon="@Icons.Material.Filled.Search">
-
-        Harness Traceability
-
+                Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Rounded.QrCodeScanner">
+        Scan & Traçabilité
     </MudNavLink>
+
+    <MudNavLink Href="/dashboard"
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Rounded.Dashboard">
+        Tableau de bord
+    </MudNavLink>
+
+    <MudText Typo="Typo.overline" Class="px-3 mt-4 text-muted">Analyses & Outils</MudText>
 
     <MudNavLink Href="/reports"
-                Icon="@Icons.Material.Filled.Assessment">
-
-        Reports
-
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Rounded.Assessment">
+        Rapports
     </MudNavLink>
-
-
 
     <MudNavLink Href="/admin"
-                Icon="@Icons.Material.Filled.Settings">
-
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Rounded.AdminPanelSettings">
         Administration
-
     </MudNavLink>
-
 </MudNavMenu>
+
