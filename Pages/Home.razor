@@ -1,57 +1,122 @@
-﻿@page "/dashboard"
+@page "/dashboard"
 
-<PageTitle>Harness Traceability</PageTitle>
+@using HT_Web.Services.State
+@inject ApplicationState AppState
 
-<MudText Typo="Typo.h3" GutterBottom="true">
-    Harness Traceability
-</MudText>
+<PageTitle>Dashboard - Harness Traceability</PageTitle>
 
-<MudText Typo="Typo.subtitle1">
-    Web Version - Initial Release
-</MudText>
-
-<MudGrid Class="mt-4">
-
-    <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4">
-
-            <MudText Typo="Typo.h6">
-                Searches Today
+<MudStack Spacing="4">
+    <div class="d-flex flex-wrap justify-space-between align-center gap-2">
+        <div>
+            <MudText Typo="Typo.h5" Class="font-weight-bold">
+                Shift Traceability Dashboard
             </MudText>
-
-            <MudText Typo="Typo.h4">
-                0
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Active Site: <strong>@(AppState.CurrentUser?.SelectedSite ?? "MFZ")</strong> • Real-time electrical test & process overview
             </MudText>
+        </div>
 
-        </MudPaper>
-    </MudItem>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Rounded.QrCodeScanner"
+                   Href="/">
+            Go to Scanner
+        </MudButton>
+    </div>
 
-    <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="1" Class="pa-4 rounded-lg border-l-4" Style="border-left-color: var(--mud-palette-primary) !important;">
+                <div class="d-flex justify-space-between align-center">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Searches Today</MudText>
+                    <MudIcon Icon="@Icons.Material.Rounded.Search" Color="Color.Primary" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h4" Class="font-weight-bold mt-2">142</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Success">+12% vs yesterday</MudText>
+            </MudPaper>
+        </MudItem>
 
-            <MudText Typo="Typo.h6">
-                Active Users
-            </MudText>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="1" Class="pa-4 rounded-lg border-l-4" Style="border-left-color: var(--mud-palette-success) !important;">
+                <div class="d-flex justify-space-between align-center">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">First Time Pass (FTQ)</MudText>
+                    <MudIcon Icon="@Icons.Material.Rounded.Verified" Color="Color.Success" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h4" Class="font-weight-bold mt-2" Color="Color.Success">97.4%</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Target: 98.0%</MudText>
+            </MudPaper>
+        </MudItem>
 
-            <MudText Typo="Typo.h4">
-                0
-            </MudText>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="1" Class="pa-4 rounded-lg border-l-4" Style="border-left-color: var(--mud-palette-warning) !important;">
+                <div class="d-flex justify-space-between align-center">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Reworked Units</MudText>
+                    <MudIcon Icon="@Icons.Material.Rounded.Build" Color="Color.Warning" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h4" Class="font-weight-bold mt-2" Color="Color.Warning">9</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Current shift</MudText>
+            </MudPaper>
+        </MudItem>
 
-        </MudPaper>
-    </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="1" Class="pa-4 rounded-lg border-l-4" Style="border-left-color: var(--mud-palette-info) !important;">
+                <div class="d-flex justify-space-between align-center">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Active Stations</MudText>
+                    <MudIcon Icon="@Icons.Material.Rounded.Sensors" Color="Color.Info" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h4" Class="font-weight-bold mt-2">14</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Lines L1 – L4</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-    <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4">
+    <MudGrid Spacing="3">
+        <MudItem xs="12" md="8">
+            <MudCard Elevation="1" Class="rounded-lg pa-2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Hourly Scan Volume</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Harnesses inspected per hour</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudChart ChartType="ChartType.Bar"
+                              ChartSeries="@_hourlySeries"
+                              XAxisLabels="@_hourLabels"
+                              Width="100%"
+                              Height="280px" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
 
-            <MudText Typo="Typo.h6">
-                Reports Generated
-            </MudText>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="1" Class="rounded-lg pa-2">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Defects by Type</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Current shift breakdown</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent Class="d-flex justify-center">
+                    <MudChart ChartType="ChartType.Donut"
+                              InputData="@_defectData"
+                              InputLabels="@_defectLabels"
+                              Width="240px"
+                              Height="240px" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudStack>
 
-            <MudText Typo="Typo.h4">
-                0
-            </MudText>
+@code {
+    private readonly string[] _hourLabels = { "06:00", "08:00", "10:00", "12:00", "14:00", "16:00" };
+    private readonly List<ChartSeries> _hourlySeries = new()
+    {
+        new ChartSeries { Name = "Passed", Data = new double[] { 24, 31, 28, 19, 26, 14 } },
+        new ChartSeries { Name = "Defects", Data = new double[] { 1, 2, 1, 0, 3, 2 } }
+    };
 
-        </MudPaper>
-    </MudItem>
-
-</MudGrid>
+    private readonly double[] _defectData = { 45, 30, 25 };
+    private readonly string[] _defectLabels = { "Missing (0)", "Extra (1)", "No Continuity (10)" };
+}
