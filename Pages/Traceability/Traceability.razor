@@ -413,12 +413,10 @@
         get => !string.IsNullOrEmpty(_selectedSite) ? _selectedSite : (AppState.CurrentUser?.SelectedSite ?? "MFZ");
         set
         {
-            _selectedSite = value;
-            if (AppState.CurrentUser is not null)
-            {
-                AppState.CurrentUser.SelectedSite = value;
-            }
-            Snackbar.Add($"Selected site: {value}", Severity.Info);
+            if (_selectedSite == value) return;
+_selectedSite = value;
+            AppState.SetSelectedSite(value);
+      Snackbar.Add($"Selected site: {value}", Severity.Info);
         }
     }
 
