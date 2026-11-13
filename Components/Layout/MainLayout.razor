@@ -1,4 +1,5 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@implements IDisposable
 
 @using HT_Web.Theme
 @using HT_Web.Services.State
@@ -31,7 +32,7 @@
 
         <MudSpacer />
 
-        <!-- Indicateur de site actif -->
+        <!-- Active Site Indicator -->
         @if (AppState.CurrentUser != null)
         {
             <MudChip T="string"
@@ -44,14 +45,14 @@
             </MudChip>
         }
 
-        <!-- Toggle Mode Sombre -->
-        <MudIconButton Icon="@(_isDarkMode? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
+        <!-- Dark Mode Toggle -->
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
                        Color="Color.Inherit"
                        OnClick="ToggleTheme"
-                       Title="Changer de thème"
+                       Title="Toggle light/dark theme"
                        Class="mr-2" />
 
-        <!-- Menu Profil Utilisateur -->
+        <!-- User Profile Menu -->
         @if (AppState.CurrentUser != null)
         {
             <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
@@ -66,7 +67,7 @@
                             @AppState.CurrentUser.DisplayName
                         </MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            Site : @(AppState.CurrentUser.SelectedSite ?? "MFZ")
+                            Site: @(AppState.CurrentUser.SelectedSite ?? "MFZ")
                         </MudText>
                     </div>
                     <MudDivider />
@@ -99,6 +100,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        AppState.OnChange += HandleStateChanged;
+
         if (AppState.CurrentUser == null)
         {
             var user = await UserAccessService.GetCurrentUserAsync();
@@ -109,7 +112,12 @@
         }
     }
 
+    private void HandleStateChanged() => InvokeAsync(StateHasChanged);
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
     private void ToggleTheme() => _isDarkMode = !_isDarkMode;
-}
 
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleStateChanged;
+    }
+}
