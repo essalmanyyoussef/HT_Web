@@ -9,6 +9,7 @@
 @inject IUserAccessService UserAccessService
 
 <MudThemeProvider Theme="@SEWSTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
 <MudDialogProvider CloseButton="true" CloseOnEscapeKey="true" MaxWidth="MaxWidth.Medium" />
 <MudSnackbarProvider AnchorOrigin="SnackbarOrigin.BottomRight" />
 
