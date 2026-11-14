@@ -1,4 +1,5 @@
-﻿@page "/"
+@page "/"
+@implements IDisposable
 
 @using HT_Web.Services.State
 @using HT_Web.Models.Traceability
@@ -12,18 +13,21 @@
 
 <PageTitle>Harness Traceability</PageTitle>
 
-<!-- Loading Overlay -->
+<!-- Interactive Loading Overlay -->
 <MudOverlay Visible="@IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
-    <div class="d-flex flex-column align-center">
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-        <MudText Typo="Typo.h6" Class="mt-3 text-white font-weight-bold">
-            Querying Harness Traceability...
+    <MudPaper Elevation="4" Class="pa-6 rounded-lg d-flex flex-column align-center text-center" Style="min-width: 340px; max-width: 440px;">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" Class="mb-4" />
+        <MudText Typo="Typo.h6" Class="font-weight-bold">
+            @_loadingTitle
         </MudText>
-    </div>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+            @_loadingSubtitle
+        </MudText>
+        <MudProgressLinear Color="Color.Secondary" Indeterminate="true" Class="mt-4 rounded" Style="width: 100%;" />
+    </MudPaper>
 </MudOverlay>
 
 <MudStack Spacing="4">
-
     <!-- 1. SEARCH & SCAN CARD -->
     <MudCard Elevation="2" Class="rounded-lg">
         <MudCardHeader Class="pb-1">
@@ -33,9 +37,7 @@
                 </MudAvatar>
             </CardHeaderAvatar>
             <CardHeaderContent>
-                <MudText Typo="Typo.h6" Class="font-weight-bold">
-                    Harness Scan & Search
-                </MudText>
+                <MudText Typo="Typo.h6" Class="font-weight-bold">Harness Scan & Search</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     Operator: @(AppState.CurrentUser?.DisplayName ?? "User")
                 </MudText>
@@ -67,8 +69,8 @@
                     <MudTextField T="string"
                                   @bind-Value="SearchValue"
                                   @ref="_searchInput"
-                                  Label="Harness S/N or Travel Ticket"
-                                  Placeholder="Scan or enter barcode..."
+                                  Label="@(IsFinalLabel ? "Harness Final Label" : "Travel Ticket")"
+                                  Placeholder="@(IsFinalLabel ? "Scan or enter Harness Label..." : "Scan or enter Travel Ticket...")"
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Normal"
                                   Adornment="Adornment.Start"
@@ -85,7 +87,6 @@
                         <MudRadio T="bool" Value="@true" Color="Color.Primary" Dense="true">Final Label</MudRadio>
                         <MudRadio T="bool" Value="@false" Color="Color.Secondary" Dense="true">Travel Ticket</MudRadio>
                     </MudRadioGroup>
-
                     <MudCheckBox T="bool"
                                  @bind-Value="IncludeAllErrors"
                                  Label="Electrical Test Process Only"
@@ -105,7 +106,6 @@
                            Disabled="@(string.IsNullOrWhiteSpace(SearchValue) || IsLoading)">
                     Search
                 </MudButton>
-
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Default"
                            StartIcon="@Icons.Material.Rounded.Clear"
@@ -115,7 +115,7 @@
                 </MudButton>
             </div>
 
-            @if (ProcessHistory.Count > 0)
+            @if (_hasSearched && ProcessHistory.Count > 0)
             {
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Secondary"
@@ -127,8 +127,8 @@
         </MudCardActions>
     </MudCard>
 
-    <!-- 2. RESULTS SECTION -->
-    @if (_hasSearched)
+    <!-- 2. RESULTS SECTION (Only rendered once loading finishes and data is collected) -->
+    @if (!IsLoading && _hasSearched)
     {
         <!-- Verdict Banner -->
         <MudAlert Severity="@(Errors.Count == 0 ? Severity.Success : Severity.Error)"
@@ -147,7 +147,6 @@
                         </MudText>
                     </div>
                 </div>
-
                 <div class="d-none d-sm-flex gap-4">
                     <MudText Typo="Typo.caption" Class="text-white">
                         <strong>Customer:</strong> SUZUKI | <strong>Project:</strong> ENGHEV | <strong>Line:</strong> L3
@@ -172,7 +171,8 @@
 
                 <!-- Total Errors Card -->
                 <MudItem xs="6" sm="4" md="3">
-                    <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4" Style="@($"border-left-color: {(Errors.Count > 0 ? "var(--mud-palette-error)" : "var(--mud-palette-success)")} !important;")">
+                    <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4"
+                              Style="@($"border-left-color: {(Errors.Count > 0 ? "var(--mud-palette-error)" : "var(--mud-palette-success)")} !important;")">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Total Errors</MudText>
                         <MudText Typo="Typo.h5" Class="font-weight-bold" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)">
                             @Errors.Count
@@ -186,11 +186,10 @@
                     @foreach (var group in Errors.GroupBy(e => e.ErrorType).OrderBy(g => g.Key))
                     {
                         <MudItem xs="6" sm="4" md="3">
-                            <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4" Style="@($"border-left-color: {GetErrorHexColor(group.Key)} !important;")">
+                            <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4"
+                                      Style="@($"border-left-color: {GetErrorHexColor(group.Key)} !important;")">
                                 <div class="d-flex justify-space-between align-center">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @GetErrorLabel(group.Key)
-                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@GetErrorLabel(group.Key)</MudText>
                                     <MudChip T="string" Size="Size.Small" Color="@GetErrorColor(group.Key)" Variant="Variant.Outlined">
                                         Type @group.Key
                                     </MudChip>
@@ -207,18 +206,13 @@
 
         <!-- 3. EXPANDABLE TABLES (STACKED ONE ON TOP OF THE OTHER) -->
         <MudExpansionPanels MultiExpansion="true" Elevation="1" Class="rounded-lg mt-2">
-
             <!-- PANEL 1: PROCESS HISTORY -->
             <MudExpansionPanel Expanded="true">
                 <TitleContent>
                     <div class="d-flex align-center gap-2">
                         <MudIcon Icon="@Icons.Material.Rounded.History" Color="Color.Primary" />
-                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
-                            Process History
-                        </MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">
-                            @ProcessHistory.Count
-                        </MudChip>
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Process History</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">@ProcessHistory.Count</MudChip>
                     </div>
                 </TitleContent>
                 <ChildContent>
@@ -253,9 +247,7 @@
                                     <tr>
                                         <td><strong>@row.Reference</strong></td>
                                         <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
-                                        <td>
-                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@row.Station</MudChip>
-                                        </td>
+                                        <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@row.Station</MudChip></td>
                                         <td>@row.SecondLabel</td>
                                         <td>@row.ThirdTravelTicketLabel</td>
                                         <td>@row.FourthTravelTicketLabel</td>
@@ -290,9 +282,7 @@
                 <TitleContent>
                     <div class="d-flex align-center gap-2">
                         <MudIcon Icon="@Icons.Material.Rounded.ReportProblem" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)" />
-                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
-                            Error Details
-                        </MudText>
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Error Details</MudText>
                         <MudChip T="string" Size="Size.Small" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)" Variant="Variant.Filled">
                             @Errors.Count
                         </MudChip>
@@ -303,9 +293,7 @@
                     {
                         <div class="pa-6 text-center text-muted">
                             <MudIcon Icon="@Icons.Material.Rounded.CheckCircleOutline" Color="Color.Success" Size="Size.Large" Class="mb-2" />
-                            <MudText Typo="Typo.body1" Class="font-weight-bold" Color="Color.Success">
-                                No errors recorded!
-                            </MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-bold" Color="Color.Success">No errors recorded!</MudText>
                             <MudText Typo="Typo.caption">This harness has passed all quality checks successfully.</MudText>
                         </div>
                     }
@@ -338,10 +326,7 @@
                                         <td>@row.Batch</td>
                                         <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
                                         <td>
-                                            <MudChip T="string"
-                                                     Color="@GetErrorColor(row.ErrorType)"
-                                                     Size="Size.Small"
-                                                     Variant="Variant.Filled">
+                                            <MudChip T="string" Color="@GetErrorColor(row.ErrorType)" Size="Size.Small" Variant="Variant.Filled">
                                                 @GetErrorLabel(row.ErrorType)
                                             </MudChip>
                                         </td>
@@ -362,25 +347,21 @@
                     }
                 </ChildContent>
             </MudExpansionPanel>
-
         </MudExpansionPanels>
     }
-    else
+    else if (!IsLoading)
     {
         <!-- 4. EMPTY / READY STATE -->
         <MudPaper Elevation="0" Class="pa-12 d-flex flex-column align-center justify-center rounded-lg border-2 border-dashed">
             <MudAvatar Size="Size.Large" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
                 <MudIcon Icon="@Icons.Material.Rounded.QrCodeScanner" Size="Size.Large" />
             </MudAvatar>
-            <MudText Typo="Typo.h6" Class="font-weight-bold">
-                System Ready for Scanning
-            </MudText>
+            <MudText Typo="Typo.h6" Class="font-weight-bold">System Ready for Scanning</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mt-1" Style="max-width: 480px;">
                 Select your site and scan a harness barcode or enter a serial number above to retrieve its process history and electrical test results.
             </MudText>
         </MudPaper>
     }
-
 </MudStack>
 
 @code {
@@ -389,6 +370,10 @@
     private List<SolvedErrorRecord> Errors = new();
     private bool IsLoading = false;
     private bool _hasSearched = false;
+
+    private string _loadingTitle = "Initializing search...";
+    private string _loadingSubtitle = "Please wait";
+
     private string SearchValue = string.Empty;
     private bool IsFinalLabel = true;
     private bool IncludeAllErrors = true;
@@ -404,7 +389,7 @@
             {
                 return userSites;
             }
-            return new List<string> { "MFZ", "AFZ", "EZZ", "BP" };
+            return new List<string> { "MFZ", "K1", "K2", "PortSaid" };
         }
     }
 
@@ -414,13 +399,25 @@
         set
         {
             if (_selectedSite == value) return;
-_selectedSite = value;
+            _selectedSite = value;
             AppState.SetSelectedSite(value);
-      Snackbar.Add($"Selected site: {value}", Severity.Info);
+            Snackbar.Add($"Selected site: {value}", Severity.Info);
         }
     }
 
     protected override void OnInitialized()
+    {
+        AppState.OnChange += HandleStateChanged;
+        SyncSiteFromState();
+    }
+
+    private void HandleStateChanged()
+    {
+        SyncSiteFromState();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SyncSiteFromState()
     {
         if (AppState.CurrentUser is not null && !string.IsNullOrWhiteSpace(AppState.CurrentUser.SelectedSite))
         {
@@ -431,7 +428,7 @@ _selectedSite = value;
             _selectedSite = AvailableSites.FirstOrDefault() ?? "MFZ";
             if (AppState.CurrentUser is not null)
             {
-                AppState.CurrentUser.SelectedSite = _selectedSite;
+                AppState.SetSelectedSite(_selectedSite);
             }
         }
     }
@@ -454,26 +451,39 @@ _selectedSite = value;
 
     private async Task Search()
     {
-        if (string.IsNullOrWhiteSpace(SearchValue))
-            return;
+        if (string.IsNullOrWhiteSpace(SearchValue)) return;
 
+        var trimmedInput = SearchValue.Trim();
+        var labelType = IsFinalLabel ? "Harness Final Label" : "Travel Ticket";
+
+        // Clear any previous results so nothing appears in the background while loading
+        ProcessHistory.Clear();
+        Errors.Clear();
+        _hasSearched = false;
         IsLoading = true;
-        _hasSearched = true;
+        _loadingTitle = $"Checking {labelType}...";
+        _loadingSubtitle = $"Validating {trimmedInput} on site {SelectedSite}";
+        await InvokeAsync(StateHasChanged);
+
+        using var cts = new CancellationTokenSource();
+        var progressTask = UpdateLoadingStepsAsync(labelType, trimmedInput, cts.Token);
 
         try
         {
-            StateHasChanged();
             var request = new TraceabilitySearchRequest
             {
-                SearchValue = SearchValue.Trim(),
+                SearchValue = trimmedInput,
                 IsFinalLabel = IsFinalLabel,
                 IncludeAllErrors = IncludeAllErrors,
                 Site = SelectedSite
             };
 
             var result = await TraceabilityService.SearchAsync(request);
+            await cts.CancelAsync();
+
             ProcessHistory = result.ProcessHistory ?? new();
             Errors = result.Errors ?? new();
+            _hasSearched = true;
 
             if (Errors.Count > 0)
             {
@@ -486,12 +496,40 @@ _selectedSite = value;
         }
         catch (Exception ex)
         {
+            await cts.CancelAsync();
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
         finally
         {
             IsLoading = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task UpdateLoadingStepsAsync(string labelType, string value, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(700, token);
+            _loadingTitle = "Collecting Process History...";
+            _loadingSubtitle = $"Retrieving station records for {labelType} ({value})";
+            await InvokeAsync(StateHasChanged);
+
+            await Task.Delay(900, token);
+            _loadingTitle = "Collecting Error & Test Details...";
+            _loadingSubtitle = IncludeAllErrors
+                ? "Filtering electrical test defects..."
+                : "Checking all recorded defects...";
+            await InvokeAsync(StateHasChanged);
+
+            await Task.Delay(900, token);
+            _loadingTitle = "Finalizing Traceability Summary...";
+            _loadingSubtitle = "Preparing process and error tables";
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+            // Search completed before next step
         }
     }
 
@@ -540,4 +578,9 @@ _selectedSite = value;
         10 => "No Continuity (10)",
         _ => $"Type {errorType}"
     };
+
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleStateChanged;
+    }
 }
