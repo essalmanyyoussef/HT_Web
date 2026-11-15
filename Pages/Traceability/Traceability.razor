@@ -28,6 +28,28 @@
 </MudOverlay>
 
 <MudStack Spacing="4">
+    @if (AppState.CurrentUser is not null && AvailableSites.Count == 0)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Elevation="1" Class="rounded-lg">
+            <div class="d-flex flex-wrap justify-space-between align-center gap-2">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                        Access Denied: No Authorized Sites
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        User <strong>@AppState.CurrentUser.DisplayName</strong> does not exist or does not have access to any site.
+                    </MudText>
+                </div>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Inherit"
+                           StartIcon="@Icons.Material.Rounded.Email"
+                           Href="mailto:SEWS-ECentralElectricalTestEngineers@sgcci.onmicrosoft.com?subject=Harness%20Traceability%20Software">
+                    Contact Support
+                </MudButton>
+            </div>
+        </MudAlert>
+    }
+
     <!-- 1. SEARCH & SCAN CARD -->
     <MudCard Elevation="2" Class="rounded-lg">
         <MudCardHeader Class="pb-1">
@@ -56,7 +78,8 @@
                                AnchorOrigin="Origin.BottomCenter"
                                Adornment="Adornment.Start"
                                AdornmentIcon="@Icons.Material.Rounded.LocationOn"
-                               AdornmentColor="Color.Primary">
+                               AdornmentColor="Color.Primary"
+                               Disabled="@(AvailableSites.Count == 0)">
                         @foreach (var site in AvailableSites)
                         {
                             <MudSelectItem T="string" Value="@site">@site</MudSelectItem>
@@ -103,7 +126,7 @@
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Rounded.Search"
                            OnClick="Search"
-                           Disabled="@(string.IsNullOrWhiteSpace(SearchValue) || IsLoading)">
+                           Disabled="@(string.IsNullOrWhiteSpace(SearchValue) || IsLoading || (AppState.CurrentUser is not null && AvailableSites.Count == 0))">
                     Search
                 </MudButton>
                 <MudButton Variant="Variant.Outlined"
@@ -135,7 +158,7 @@
                   Variant="Variant.Filled"
                   Elevation="1"
                   Class="rounded-lg py-2">
-            <div class="d-flex justify-space-between align-center">
+            <div class="d-flex flex-wrap justify-space-between align-center gap-2">
                 <div class="d-flex align-center gap-2">
                     <MudIcon Icon="@(Errors.Count == 0 ? Icons.Material.Rounded.CheckCircle : Icons.Material.Rounded.Warning)" Size="Size.Large" />
                     <div>
@@ -147,11 +170,17 @@
                         </MudText>
                     </div>
                 </div>
-                <div class="d-none d-sm-flex gap-4">
-                    <MudText Typo="Typo.caption" Class="text-white">
-                        <strong>Customer:</strong> SUZUKI | <strong>Project:</strong> ENGHEV | <strong>Line:</strong> L3
-                    </MudText>
-                </div>
+                @if (_harnessInfo is not null)
+                {
+                    <div class="d-flex flex-wrap gap-3">
+                        <MudText Typo="Typo.caption" Class="text-white">
+                            <strong>Customer:</strong> @_harnessInfo.Customer |
+                            <strong>Project:</strong> @_harnessInfo.Project |
+                            <strong>Family:</strong> @_harnessInfo.Family |
+                            <strong>Line:</strong> @_harnessInfo.Line
+                        </MudText>
+                    </div>
+                }
             </div>
         </MudAlert>
 
@@ -305,7 +334,10 @@
                                     <th>Reference</th>
                                     <th>Batch</th>
                                     <th>Travel Ticket</th>
+                                    <th>Worker ID</th>
                                     <th>Error Type</th>
+                                    <th>TMP 01</th>
+                                    <th>TMP 02</th>
                                     <th>Object</th>
                                     <th>Wire1</th>
                                     <th>Wire2</th>
@@ -316,6 +348,7 @@
                                     <th>CPV1</th>
                                     <th>CPV2</th>
                                     <th>CPV3</th>
+                                    <th>CPV4</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -325,11 +358,14 @@
                                         <td><strong>@row.Reference</strong></td>
                                         <td>@row.Batch</td>
                                         <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
+                                        <td>@row.WorkerId</td>
                                         <td>
                                             <MudChip T="string" Color="@GetErrorColor(row.ErrorType)" Size="Size.Small" Variant="Variant.Filled">
                                                 @GetErrorLabel(row.ErrorType)
                                             </MudChip>
                                         </td>
+                                        <td>@row.Tmp01</td>
+                                        <td>@row.Tmp02</td>
                                         <td>@row.Object</td>
                                         <td>@row.Wire1</td>
                                         <td>@row.Wire2</td>
@@ -340,6 +376,7 @@
                                         <td>@row.CPV1</td>
                                         <td>@row.CPV2</td>
                                         <td>@row.CPV3</td>
+                                        <td>@row.CPV4</td>
                                     </tr>
                                 }
                             </tbody>
@@ -368,6 +405,7 @@
     private MudTextField<string>? _searchInput;
     private List<TraceabilityRecord> ProcessHistory = new();
     private List<SolvedErrorRecord> Errors = new();
+    private HarnessInformation? _harnessInfo;
     private bool IsLoading = false;
     private bool _hasSearched = false;
 
@@ -377,17 +415,15 @@
     private string SearchValue = string.Empty;
     private bool IsFinalLabel = true;
     private bool IncludeAllErrors = true;
-    private string _selectedSite = "MFZ";
+    private string _selectedSite = string.Empty;
 
-    // Dynamic Site List with fallback
     private List<string> AvailableSites
     {
         get
         {
-            var userSites = AppState.CurrentUser?.AccessibleSites;
-            if (userSites != null && userSites.Count > 0)
+            if (AppState.CurrentUser is not null)
             {
-                return userSites;
+                return AppState.CurrentUser.AccessibleSites ?? new List<string>();
             }
             return new List<string> { "MFZ", "K1", "K2", "PortSaid" };
         }
@@ -395,7 +431,7 @@
 
     private string SelectedSite
     {
-        get => !string.IsNullOrEmpty(_selectedSite) ? _selectedSite : (AppState.CurrentUser?.SelectedSite ?? "MFZ");
+        get => !string.IsNullOrEmpty(_selectedSite) ? _selectedSite : (AppState.CurrentUser?.SelectedSite ?? AvailableSites.FirstOrDefault() ?? "MFZ");
         set
         {
             if (_selectedSite == value) return;
@@ -425,8 +461,8 @@
         }
         else
         {
-            _selectedSite = AvailableSites.FirstOrDefault() ?? "MFZ";
-            if (AppState.CurrentUser is not null)
+            _selectedSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+            if (AppState.CurrentUser is not null && !string.IsNullOrEmpty(_selectedSite))
             {
                 AppState.SetSelectedSite(_selectedSite);
             }
@@ -452,13 +488,18 @@
     private async Task Search()
     {
         if (string.IsNullOrWhiteSpace(SearchValue)) return;
+        if (AppState.CurrentUser is not null && AvailableSites.Count == 0)
+        {
+            Snackbar.Add("You do not have access to any site.", Severity.Error);
+            return;
+        }
 
         var trimmedInput = SearchValue.Trim();
         var labelType = IsFinalLabel ? "Harness Final Label" : "Travel Ticket";
 
-        // Clear any previous results so nothing appears in the background while loading
         ProcessHistory.Clear();
         Errors.Clear();
+        _harnessInfo = null;
         _hasSearched = false;
         IsLoading = true;
         _loadingTitle = $"Checking {labelType}...";
@@ -483,6 +524,7 @@
 
             ProcessHistory = result.ProcessHistory ?? new();
             Errors = result.Errors ?? new();
+            _harnessInfo = result.HarnessInformation;
             _hasSearched = true;
 
             if (Errors.Count > 0)
@@ -518,18 +560,17 @@
             await Task.Delay(900, token);
             _loadingTitle = "Collecting Error & Test Details...";
             _loadingSubtitle = IncludeAllErrors
-                ? "Filtering electrical test defects..."
+                ? "Checking electrical test window & defects..."
                 : "Checking all recorded defects...";
             await InvokeAsync(StateHasChanged);
 
             await Task.Delay(900, token);
             _loadingTitle = "Finalizing Traceability Summary...";
-            _loadingSubtitle = "Preparing process and error tables";
+            _loadingSubtitle = "Preparing process, family, and error details";
             await InvokeAsync(StateHasChanged);
         }
         catch (TaskCanceledException)
         {
-            // Search completed before next step
         }
     }
 
@@ -538,6 +579,7 @@
         SearchValue = string.Empty;
         ProcessHistory.Clear();
         Errors.Clear();
+        _harnessInfo = null;
         _hasSearched = false;
         _searchInput?.FocusAsync();
     }
@@ -557,25 +599,34 @@
 
     private static Color GetErrorColor(int errorType) => errorType switch
     {
-        0 => Color.Error,
-        1 => Color.Warning,
+        0 or 2 or 4 or 6 or 9 or 11 => Color.Error,
+        1 or 3 or 5 or 7 or 8 => Color.Warning,
         10 => Color.Info,
         _ => Color.Default
     };
 
     private static string GetErrorHexColor(int errorType) => errorType switch
     {
-        0 => "#EF4444",
-        1 => "#F59E0B",
+        0 or 2 or 4 or 6 or 9 or 11 => "#EF4444",
+        1 or 3 or 5 or 7 or 8 => "#F59E0B",
         10 => "#3B82F6",
         _ => "#64748B"
     };
 
     private static string GetErrorLabel(int errorType) => errorType switch
     {
-        0 => "Missing (0)",
-        1 => "Extra (1)",
+        0 => "Missing Detection (0)",
+        1 => "Extra Detection (1)",
+        2 => "Missing Connector (2)",
+        3 => "Extra Connector (3)",
+        4 => "Short Through Diode (4)",
+        5 => "Open In Diode (5)",
+        6 => "Diode Inverted (6)",
+        7 => "Inversion (7)",
+        8 => "Possible Inversion (8)",
+        9 => "Short-circuit (9)",
         10 => "No Continuity (10)",
+        11 => "Bad End (11)",
         _ => $"Type {errorType}"
     };
 
