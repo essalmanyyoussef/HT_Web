@@ -186,4 +186,94 @@ public class TraceabilityRepository : ITraceabilityRepository
 
         return result.ToList();
     }
+    public async Task<string?> GetStationFamilyAsync(
+        string site,
+        string hostname,
+        DateTime testDate)
+    {
+        const string sql = @"
+            SELECT TOP (1) Bank
+            FROM AggregatedCorrelations WITH (NOLOCK)
+            WHERE Hostname = @Hostname
+              AND RunDateTime <= @TestDate
+            ORDER BY RunDateTime DESC";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        return await connection.QueryFirstOrDefaultAsync<string>(
+            new CommandDefinition(
+                sql,
+                new { Hostname = hostname, TestDate = testDate },
+                commandTimeout: 300));
+    }
+
+    public async Task<(DateTime DateBegin, DateTime DateEnd)?> GetTestDatesAsync(
+        string site,
+        string hostname,
+        DateTime testDate)
+    {
+        const string sql = @"
+            SELECT TOP (1) DateBegin, DateEnd
+            FROM dbo.tests WITH (NOLOCK)
+            WHERE DateBegin < @TestDate
+              AND Hostname = @Hostname
+            ORDER BY DateEnd DESC";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var row = await connection.QueryFirstOrDefaultAsync<(DateTime DateBegin, DateTime DateEnd)?>(
+            new CommandDefinition(
+                sql,
+                new { Hostname = hostname, TestDate = testDate },
+                commandTimeout: 300));
+
+        return row;
+    }
+
+    public async Task<List<SolvedErrorRecord>> GetErrorsByDateAsync(
+        string site,
+        string hostname,
+        DateTime dateBegin,
+        DateTime dateEnd)
+    {
+        const string sql = @"
+            SELECT
+                Ref AS Reference,
+                Batch,
+                Part AS TravelTicketLabel,
+                Worker AS WorkerId,
+                Type AS ErrorType,
+                Counterpart1 AS Tmp01,
+                Counterpart2 AS Tmp02,
+                Object,
+                Wire1,
+                Wire2,
+                Way,
+                DateBegin AS StartDate,
+                DateEnd AS EndDate,
+                TimeU,
+                CPV1,
+                CPV2,
+                CPV3,
+                CPV4,
+                Hostname
+            FROM dbo.solvederrors WITH (NOLOCK)
+            WHERE Hostname = @Hostname
+              AND DateBegin >= @DateBegin
+              AND DateEnd <= @DateEnd
+            ORDER BY DateBegin DESC";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<SolvedErrorRecord>(
+            new CommandDefinition(
+                sql,
+                new { Hostname = hostname, DateBegin = dateBegin, DateEnd = dateEnd },
+                commandTimeout: 300));
+
+        return result.ToList();
+    }
 }
