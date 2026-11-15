@@ -10,11 +10,12 @@ using HT_Web.Data;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddMudServices();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<SqlConnectionFactory>();
 builder.Services.AddScoped<ApplicationState>();
 builder.Services.AddScoped<AuthenticationApiService>();
 builder.Services.AddScoped<DummyTraceabilityService>();
-builder.Services.AddScoped<IUserAccessService, MockUserAccessService>();
+builder.Services.AddScoped<IUserAccessService, UserAccessService>();
 
 builder.Services.AddScoped<ITraceabilityRepository,
     TraceabilityRepository>();
