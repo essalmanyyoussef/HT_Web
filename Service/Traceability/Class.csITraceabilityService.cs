@@ -4,10 +4,6 @@ namespace HT_Web.Services.Traceability;
 
 public interface ITraceabilityService
 {
-    Task<List<TraceabilityRecord>> GetTraceabilityAsync(
-        string searchValue,
-        bool isFinalLabel);
-
-    Task<List<SolvedErrorRecord>> GetErrorsAsync(
-        string searchValue);
+    Task<TraceabilitySearchResult> SearchAsync(
+        TraceabilitySearchRequest request);
 }
