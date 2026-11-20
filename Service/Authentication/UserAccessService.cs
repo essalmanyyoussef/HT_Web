@@ -61,14 +61,19 @@ public class UserAccessService : IUserAccessService
 
     private (List<string> Candidates, string DisplayName, string Email) ResolveCurrentUser()
     {
-        var identityName = _httpContextAccessor.HttpContext?.User?.Identity?.Name;
-        var samName = StripDomain(identityName)
-            ?? (OperatingSystem.IsWindows() ? StripDomain(GetWindowsIdentityName()) : null)
-            ?? Environment.UserName;
+        var fullIdentity = _httpContextAccessor.HttpContext?.User?.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(fullIdentity) && OperatingSystem.IsWindows())
+        {
+            fullIdentity = GetWindowsIdentityName();
+        }
+
+        var (domain, samName) = SplitDomainAndUser(fullIdentity);
+        domain ??= Environment.UserDomainName;
+        samName ??= Environment.UserName;
 
         if (OperatingSystem.IsWindows())
         {
-            var adResult = ResolveFromActiveDirectory(samName);
+            var adResult = ResolveFromActiveDirectory(domain, samName);
             if (adResult.Candidates.Count > 1 || !string.Equals(adResult.DisplayName, samName, StringComparison.OrdinalIgnoreCase))
             {
                 return adResult;
@@ -95,37 +100,43 @@ public class UserAccessService : IUserAccessService
     private static string? GetWindowsIdentityName() => WindowsIdentity.GetCurrent()?.Name;
 
     [SupportedOSPlatform("windows")]
-    private (List<string> Candidates, string DisplayName, string Email) ResolveFromActiveDirectory(string samName)
+    private (List<string> Candidates, string DisplayName, string Email) ResolveFromActiveDirectory(string domain, string samName)
     {
         var candidates = new List<string>();
         string displayName = samName;
         string email = $"{samName}@sews-e.com";
+        string? adError = null;
 
         try
         {
             UserPrincipal? principal = null;
 
-            // 1. Try UserPrincipal.Current first (same as WinForms Form2)
+            // 1. Try explicit domain PrincipalContext lookup
             try
             {
-                principal = UserPrincipal.Current;
+                using var domainContext = !string.IsNullOrWhiteSpace(domain)
+                    ? new PrincipalContext(ContextType.Domain, domain)
+                    : new PrincipalContext(ContextType.Domain);
+
+                principal = UserPrincipal.FindByIdentity(domainContext, IdentityType.SamAccountName, samName);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "UserPrincipal.Current failed for {SamName}", samName);
+                adError = $"PC({domain}): {ex.Message}";
+                _logger.LogWarning(ex, "PrincipalContext lookup failed for {Domain}\\{SamName}", domain, samName);
             }
 
-            // 2. Fallback to Domain PrincipalContext lookup
+            // 2. Fallback to UserPrincipal.Current
             if (principal == null || string.IsNullOrWhiteSpace(principal.DisplayName))
             {
                 try
                 {
-                    using var domainContext = new PrincipalContext(ContextType.Domain);
-                    principal = UserPrincipal.FindByIdentity(domainContext, IdentityType.SamAccountName, samName);
+                    principal = UserPrincipal.Current;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Domain PrincipalContext lookup failed for {SamName}", samName);
+                    adError = $"{adError} | Current: {ex.Message}";
+                    _logger.LogWarning(ex, "UserPrincipal.Current failed for {SamName}", samName);
                 }
             }
 
@@ -156,7 +167,12 @@ public class UserAccessService : IUserAccessService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Active Directory resolution failed for {SamName}", samName);
+            adError = $"{adError} | AD: {ex.Message}";
+        }
+
+        if (candidates.Count == 0 && !string.IsNullOrWhiteSpace(adError))
+        {
+            displayName = $"{samName} [{adError}]";
         }
 
         if (!candidates.Contains(samName, StringComparer.OrdinalIgnoreCase))
@@ -167,14 +183,17 @@ public class UserAccessService : IUserAccessService
         return (candidates, displayName, email);
     }
 
-    private static string? StripDomain(string? accountName)
+    private static (string? Domain, string? User) SplitDomainAndUser(string? accountName)
     {
         if (string.IsNullOrWhiteSpace(accountName))
-            return null;
+            return (null, null);
 
         var idx = accountName.IndexOf('\\');
-        return idx >= 0 && idx < accountName.Length - 1
-            ? accountName[(idx + 1)..]
-            : accountName;
+        if (idx > 0 && idx < accountName.Length - 1)
+        {
+            return (accountName[..idx], accountName[(idx + 1)..]);
+        }
+
+        return (null, accountName);
     }
 }

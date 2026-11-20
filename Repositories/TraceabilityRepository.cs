@@ -25,22 +25,22 @@ public class TraceabilityRepository : ITraceabilityRepository
         await connection.OpenAsync();
 
         const string sql =
-        """
-        SELECT DISTINCT
-            Ref             AS Reference,
-            BC              AS TravelTicketLabel,
-            Test            AS Station,
-            IN_Barcode_1    AS SecondLabel,
-            IN_Barcode_2    AS ThirdTravelTicketLabel,
-            IN_Barcode_3    AS FourthTravelTicketLabel,
-            OUT_Barcode     AS FinalLabel,
-            DateEnd         AS TestDate,
-            Rework          AS Reworked,
-            Rework_ID       AS ReworkId,
-            Hostname
-        FROM correlations_trial WITH (NOLOCK)
-        WHERE OUT_Barcode = @FinalLabel
-        """;
+"""
+SELECT DISTINCT
+    Ref             AS Reference,
+    BC              AS TravelTicketLabel,
+    Test            AS Station,
+    IN_Barcode_1    AS SecondLabel,
+    IN_Barcode_2    AS ThirdTravelTicketLabel,
+    IN_Barcode_3    AS FourthTravelTicketLabel,
+    OUT_Barcode     AS FinalLabel,
+    DateEnd         AS TestDate,
+    Rework          AS Reworked,
+    Rework_ID       AS ReworkId,
+    Hostname
+FROM correlations_trial WITH (NOLOCK)
+WHERE OUT_Barcode = @FinalLabel
+""";
 
         var result =
             await connection.QueryAsync<TraceabilityRecord>(
@@ -66,23 +66,23 @@ public class TraceabilityRepository : ITraceabilityRepository
         await connection.OpenAsync();
 
         const string sql =
-        """
-        SELECT DISTINCT
-            Ref             AS Reference,
-            BC              AS TravelTicketLabel,
-            Test            AS Station,
-            IN_Barcode_1    AS SecondLabel,
-            IN_Barcode_2    AS ThirdTravelTicketLabel,
-            IN_Barcode_3    AS FourthTravelTicketLabel,
-            OUT_Barcode     AS FinalLabel,
-            DateEnd         AS TestDate,
-            Rework          AS Reworked,
-            Rework_ID       AS ReworkId,
-            Hostname
-        FROM correlations_trial WITH (NOLOCK)
-        WHERE BC = @TravelTicket
-        ORDER BY DateEnd ASC
-        """;
+"""
+SELECT DISTINCT
+    Ref             AS Reference,
+    BC              AS TravelTicketLabel,
+    Test            AS Station,
+    IN_Barcode_1    AS SecondLabel,
+    IN_Barcode_2    AS ThirdTravelTicketLabel,
+    IN_Barcode_3    AS FourthTravelTicketLabel,
+    OUT_Barcode     AS FinalLabel,
+    DateEnd         AS TestDate,
+    Rework          AS Reworked,
+    Rework_ID       AS ReworkId,
+    Hostname
+FROM correlations_trial WITH (NOLOCK)
+WHERE BC = @TravelTicket
+ORDER BY DateEnd ASC
+""";
 
         var result =
             await connection.QueryAsync<TraceabilityRecord>(
@@ -111,31 +111,31 @@ public class TraceabilityRepository : ITraceabilityRepository
             $"Searching Errors By Key = [{travelTicket}]");
 
         const string sql =
-        """
-    SELECT
-        Ref             AS Reference,
-        Batch,
-        Part            AS TravelTicketLabel,
-        Worker          AS WorkerId,
-        Type            AS ErrorType,
-        Counterpart1    AS Tmp01,
-        Counterpart2    AS Tmp02,
-        Object,
-        Wire1,
-        Wire2,
-        Way,
-        DateBegin       AS StartDate,
-        DateEnd         AS EndDate,
-        TimeU,
-        CPV1,
-        CPV2,
-        CPV3,
-        CPV4,
-        Hostname
-    FROM dbo.solvederrors WITH (NOLOCK)
-    WHERE Part = @TravelTicket
-    ORDER BY DateBegin DESC
-    """;
+"""
+SELECT
+    Ref             AS Reference,
+    Batch,
+    Part            AS TravelTicketLabel,
+    Worker          AS WorkerId,
+    Type            AS ErrorType,
+    Counterpart1    AS Tmp01,
+    Counterpart2    AS Tmp02,
+    Object,
+    Wire1,
+    Wire2,
+    Way,
+    DateBegin       AS StartDate,
+    DateEnd         AS EndDate,
+    TimeU,
+    CPV1,
+    CPV2,
+    CPV3,
+    CPV4,
+    Hostname
+FROM dbo.solvederrors WITH (NOLOCK)
+WHERE Part = @TravelTicket
+ORDER BY DateBegin DESC
+""";
 
         var result =
             await connection.QueryAsync<SolvedErrorRecord>(
@@ -151,9 +151,9 @@ public class TraceabilityRepository : ITraceabilityRepository
     }
 
     public async Task<List<ErrorSearchResult>>
-    GetEtStationsAsync(
-        string site,
-        string travelTicket)
+        GetEtStationsAsync(
+            string site,
+            string travelTicket)
     {
         using var connection =
             _connectionFactory.CreateConnection(site);
@@ -161,18 +161,18 @@ public class TraceabilityRepository : ITraceabilityRepository
         await connection.OpenAsync();
 
         const string sql =
-        """
-    SELECT
-        Hostname,
-        DateEnd AS TestDate
-    FROM correlations_trial
-    WHERE BC = @TravelTicket
-    AND (
-        Test LIKE '%ET%'
-        OR Test LIKE '%ELEC%'
-        OR Test LIKE '%ELECTRIC%'
-    )
-    """;
+"""
+SELECT
+    Hostname,
+    DateEnd AS TestDate
+FROM correlations_trial
+WHERE BC = @TravelTicket
+AND (
+    Test LIKE '%ET%'
+    OR Test LIKE '%ELEC%'
+    OR Test LIKE '%ELECTRIC%'
+)
+""";
 
         var result =
             await connection.QueryAsync<ErrorSearchResult>(
@@ -186,6 +186,7 @@ public class TraceabilityRepository : ITraceabilityRepository
 
         return result.ToList();
     }
+
     public async Task<string?> GetStationFamilyAsync(
         string site,
         string hostname,
@@ -195,8 +196,7 @@ public class TraceabilityRepository : ITraceabilityRepository
             SELECT TOP (1) Bank
             FROM AggregatedCorrelations WITH (NOLOCK)
             WHERE Hostname = @Hostname
-              AND RunDateTime <= @TestDate
-            ORDER BY RunDateTime DESC";
+              AND RunTimestamp > @TestDate";
 
         using var connection = _connectionFactory.CreateConnection(site);
         await connection.OpenAsync();
@@ -261,8 +261,7 @@ public class TraceabilityRepository : ITraceabilityRepository
                 Hostname
             FROM dbo.solvederrors WITH (NOLOCK)
             WHERE Hostname = @Hostname
-              AND DateBegin >= @DateBegin
-              AND DateEnd <= @DateEnd
+              AND DateBegin BETWEEN @DateBegin AND @DateEnd
             ORDER BY DateBegin DESC";
 
         using var connection = _connectionFactory.CreateConnection(site);
