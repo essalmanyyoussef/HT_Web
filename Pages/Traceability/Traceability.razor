@@ -1,3 +1,4 @@
+Razor CSHTML 
 @page "/"
 @implements IDisposable
 
@@ -13,24 +14,160 @@
 
 <PageTitle>Harness Traceability</PageTitle>
 
-<!-- Interactive Loading Overlay -->
-<MudOverlay Visible="@IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999">
-    <MudPaper Elevation="4" Class="pa-6 rounded-lg d-flex flex-column align-center text-center" Style="min-width: 340px; max-width: 440px;">
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" Class="mb-4" />
-        <MudText Typo="Typo.h6" Class="font-weight-bold">
-            @_loadingTitle
-        </MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
-            @_loadingSubtitle
-        </MudText>
-        <MudProgressLinear Color="Color.Secondary" Indeterminate="true" Class="mt-4 rounded" Style="width: 100%;" />
+<style>
+    .compact-grid .mud-table-cell {
+        padding: 5px 6px !important;
+        font-size: 0.76rem !important;
+        line-height: 1.25 !important;
+        white-space: nowrap;
+    }
+
+    .compact-grid .mud-table-head .mud-table-row {
+        background: linear-gradient(180deg, rgba(10, 37, 64, 0.06) 0%, rgba(10, 37, 64, 0.02) 100%);
+        border-bottom: 2px solid var(--mud-palette-primary);
+    }
+
+    .compact-grid .mud-table-head .mud-table-cell {
+        padding: 7px 6px !important;
+        vertical-align: top !important;
+    }
+
+    .compact-grid .mud-table-head .column-header {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 2px;
+    }
+
+        .compact-grid .mud-table-head .column-header .mud-table-sort-label {
+            font-size: 0.70rem !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--mud-palette-text-primary);
+            white-space: nowrap;
+        }
+
+        .compact-grid .mud-table-head .column-header .column-options {
+            margin-left: 0 !important;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 2px;
+        }
+
+            .compact-grid .mud-table-head .column-header .column-options > * {
+                display: inline-flex !important;
+                width: auto !important;
+            }
+
+    .compact-grid .mud-table-head .mud-icon-button {
+        padding: 2px !important;
+    }
+
+    .compact-grid .mud-table-head .mud-svg-icon {
+        font-size: 0.92rem !important;
+    }
+
+    .glass-loader {
+        background: rgba(15, 23, 42, 0.88) !important;
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        color: #F8FAFC !important;
+    }
+
+    .loader-step {
+        transition: all 0.25s ease;
+    }
+</style>
+
+
+
+<!-- Modern 2026 Step-Tracker Loading Overlay -->
+<MudOverlay Visible="@IsLoading" DarkBackground="true" Absolute="false" ZIndex="9999"
+            Style="backdrop-filter: blur(6px);">
+    <MudPaper Elevation="0" Class="pa-7 rounded-xl glass-loader" Style="min-width: 380px; max-width: 460px;">
+        <div class="d-flex align-center gap-4 mb-5">
+            <div class="d-flex align-center justify-center rounded-lg"
+                 style="width: 52px; height: 52px; background: linear-gradient(135deg, #0066CC, #38BDF8);">
+                <MudProgressCircular Color="Color.Inherit" Indeterminate="true" Size="Size.Small" Style="color: white;" />
+            </div>
+            <div>
+                <MudText Typo="Typo.overline" Style="color: #38BDF8; letter-spacing: 0.08em;">
+                    SEWS MES TRACEABILITY
+                </MudText>
+                <MudText Typo="Typo.h6" Class="font-weight-bold" Style="color: #FFFFFF; line-height: 1.2;">
+                    @_loadingTitle
+                </MudText>
+                <MudText Typo="Typo.caption" Style="color: #94A3B8;">
+                    @_loadingSubtitle
+                </MudText>
+            </div>
+        </div>
+
+        <MudStack Spacing="2" Class="mb-4">
+            <div class="d-flex align-center gap-2 loader-step">
+                @if (_loadingStep > 1)
+                {
+                    <MudIcon Icon="@Icons.Material.Rounded.CheckCircle" Size="Size.Small" Style="color: #34D399;" />
+                }
+                else
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Style="width: 18px; height: 18px; color: #38BDF8;" />
+                }
+                <MudText Typo="Typo.body2" Style="@($"color: {(_loadingStep >= 1 ? "#F8FAFC" : "#64748B")};")">
+                    Validating @(IsFinalLabel ? "Harness Final Label" : "Travel Ticket") on @SelectedSite
+                </MudText>
+            </div>
+
+            <div class="d-flex align-center gap-2 loader-step">
+                @if (_loadingStep > 2)
+                {
+                    <MudIcon Icon="@Icons.Material.Rounded.CheckCircle" Size="Size.Small" Style="color: #34D399;" />
+                }
+                else if (_loadingStep == 2)
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Style="width: 18px; height: 18px; color: #38BDF8;" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Rounded.RadioButtonUnchecked" Size="Size.Small" Style="color: #475569;" />
+                }
+                <MudText Typo="Typo.body2" Style="@($"color: {(_loadingStep >= 2 ? "#F8FAFC" : "#64748B")};")">
+                    Collecting station & process history
+                </MudText>
+            </div>
+
+            <div class="d-flex align-center gap-2 loader-step">
+                @if (_loadingStep > 3)
+                {
+                    <MudIcon Icon="@Icons.Material.Rounded.CheckCircle" Size="Size.Small" Style="color: #34D399;" />
+                }
+                else if (_loadingStep == 3)
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Style="width: 18px; height: 18px; color: #38BDF8;" />
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Rounded.RadioButtonUnchecked" Size="Size.Small" Style="color: #475569;" />
+                }
+                <MudText Typo="Typo.body2" Style="@($"color: {(_loadingStep >= 3 ? "#F8FAFC" : "#64748B")};")">
+                    Collecting electrical test & defect records
+                </MudText>
+            </div>
+        </MudStack>
+
+        <MudProgressLinear Color="Color.Info" Value="@(_loadingStep * 33)" Rounded="true" Size="Size.Small" />
     </MudPaper>
 </MudOverlay>
 
 <MudStack Spacing="4">
     @if (AppState.CurrentUser is not null && AvailableSites.Count == 0)
     {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Elevation="1" Class="rounded-lg">
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Elevation="1" Class="rounded-xl">
             <div class="d-flex flex-wrap justify-space-between align-center gap-2">
                 <div>
                     <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
@@ -51,7 +188,7 @@
     }
 
     <!-- 1. SEARCH & SCAN CARD -->
-    <MudCard Elevation="2" Class="rounded-lg">
+    <MudCard Elevation="2" Class="rounded-xl" Style="border: 1px solid var(--mud-palette-divider);">
         <MudCardHeader Class="pb-1">
             <CardHeaderAvatar>
                 <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
@@ -66,15 +203,16 @@
             </CardHeaderContent>
         </MudCardHeader>
 
-        <MudCardContent Class="pt-2">
-            <MudGrid AlignItems="Center">
-                <!-- Site Selector Dropdown (Placed right next to serial number) -->
-                <MudItem xs="12" sm="4" md="3">
+        <MudCardContent Class="pt-2 pb-3">
+            <MudGrid Spacing="2" AlignItems="Center">
+                <!-- Compact Site Selector -->
+                <MudItem xs="12" sm="3" md="2">
                     <MudSelect T="string"
                                @bind-Value="SelectedSite"
                                Label="Site"
                                Variant="Variant.Outlined"
-                               Margin="Margin.Normal"
+                               Margin="Margin.Dense"
+                               Dense="true"
                                AnchorOrigin="Origin.BottomCenter"
                                Adornment="Adornment.Start"
                                AdornmentIcon="@Icons.Material.Rounded.LocationOn"
@@ -88,14 +226,14 @@
                 </MudItem>
 
                 <!-- Serial Number Barcode Input -->
-                <MudItem xs="12" sm="8" md="5">
+                <MudItem xs="12" sm="9" md="6">
                     <MudTextField T="string"
                                   @bind-Value="SearchValue"
                                   @ref="_searchInput"
                                   Label="@(IsFinalLabel ? "Harness Final Label" : "Travel Ticket")"
                                   Placeholder="@(IsFinalLabel ? "Scan or enter Harness Label..." : "Scan or enter Travel Ticket...")"
                                   Variant="Variant.Outlined"
-                                  Margin="Margin.Normal"
+                                  Margin="Margin.Dense"
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Rounded.QrCodeScanner"
                                   AdornmentColor="Color.Primary"
@@ -104,23 +242,24 @@
                                   Class="font-weight-bold text-uppercase" />
                 </MudItem>
 
-                <!-- Filter Controls -->
-                <MudItem xs="12" md="4" Class="d-flex flex-column gap-1">
-                    <MudRadioGroup T="bool" @bind-Value="IsFinalLabel" Class="d-flex align-center">
-                        <MudRadio T="bool" Value="@true" Color="Color.Primary" Dense="true">Final Label</MudRadio>
-                        <MudRadio T="bool" Value="@false" Color="Color.Secondary" Dense="true">Travel Ticket</MudRadio>
+                <!-- Aligned Radio & Filter Controls -->
+                <MudItem xs="12" md="4" Class="d-flex flex-column justify-center pl-md-3">
+                    <MudRadioGroup T="bool" @bind-Value="IsFinalLabel" Class="d-flex align-center gap-3 ma-0 pa-0">
+                        <MudRadio T="bool" Value="@true" Color="Color.Primary" Dense="true" Size="Size.Small">Final Label</MudRadio>
+                        <MudRadio T="bool" Value="@false" Color="Color.Secondary" Dense="true" Size="Size.Small">Travel Ticket</MudRadio>
                     </MudRadioGroup>
                     <MudCheckBox T="bool"
                                  @bind-Value="IncludeAllErrors"
                                  Label="Electrical Test Process Only"
                                  Color="Color.Primary"
                                  Dense="true"
-                                 Size="Size.Small" />
+                                 Size="Size.Small"
+                                 Class="mt-1" />
                 </MudItem>
             </MudGrid>
         </MudCardContent>
 
-        <MudCardActions Class="px-4 pb-4 pt-0 d-flex justify-space-between align-center">
+        <MudCardActions Class="px-4 pb-4 pt-1 d-flex justify-space-between align-center">
             <div class="d-flex gap-2">
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
@@ -150,14 +289,14 @@
         </MudCardActions>
     </MudCard>
 
-    <!-- 2. RESULTS SECTION (Only rendered once loading finishes and data is collected) -->
+    <!-- 2. RESULTS SECTION -->
     @if (!IsLoading && _hasSearched)
     {
         <!-- Verdict Banner -->
         <MudAlert Severity="@(Errors.Count == 0 ? Severity.Success : Severity.Error)"
                   Variant="Variant.Filled"
                   Elevation="1"
-                  Class="rounded-lg py-2">
+                  Class="rounded-xl py-2">
             <div class="d-flex flex-wrap justify-space-between align-center gap-2">
                 <div class="d-flex align-center gap-2">
                     <MudIcon Icon="@(Errors.Count == 0 ? Icons.Material.Rounded.CheckCircle : Icons.Material.Rounded.Warning)" Size="Size.Large" />
@@ -166,7 +305,7 @@
                             @(Errors.Count == 0 ? "STATUS: CONFORMANT (PASS)" : $"STATUS: DEFECTS DETECTED ({Errors.Count} ERROR(S))")
                         </MudText>
                         <MudText Typo="Typo.caption">
-                            @(Errors.Count == 0 ? "No active defects recorded for this harness." : "Review rework history and error details below.")
+                            @(Errors.Count == 0 ? "No active defects recorded for this harness." : "Defect detected during testing process.")
                         </MudText>
                     </div>
                 </div>
@@ -184,47 +323,73 @@
             </div>
         </MudAlert>
 
-        <!-- Dynamic Error Cards Strip -->
-        <div class="mt-1">
-            <MudText Typo="Typo.subtitle2" Class="font-weight-bold mb-2 text-muted">
-                Inspection Summary & Defects by Type
+        <!-- Modern 2026 Inspection Summary Cards -->
+        <div>
+            <MudText Typo="Typo.overline" Class="font-weight-bold mb-2 d-block" Color="Color.Secondary">
+                Inspection Summary & Defects Breakdown
             </MudText>
             <MudGrid Spacing="3">
                 <!-- Total Process Steps Card -->
                 <MudItem xs="6" sm="4" md="3">
-                    <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4" Style="border-left-color: var(--mud-palette-primary) !important;">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Process Steps</MudText>
-                        <MudText Typo="Typo.h5" Class="font-weight-bold">@ProcessHistory.Count</MudText>
+                    <MudPaper Elevation="0" Class="pa-4"
+                              Style="border-radius: 14px; border: 1px solid var(--mud-palette-divider); background: linear-gradient(135deg, rgba(10,37,64,0.04) 0%, var(--mud-palette-surface) 100%);">
+                        <div class="d-flex justify-space-between align-start">
+                            <div>
+                                <MudText Typo="Typo.overline" Color="Color.Secondary" Style="line-height: 1.2;">Process Steps</MudText>
+                                <MudText Typo="Typo.h4" Class="font-weight-bold mt-2">@ProcessHistory.Count</MudText>
+                            </div>
+                            <MudAvatar Size="Size.Medium" Rounded="true" Style="background-color: rgba(0,102,204,0.12); color: var(--mud-palette-secondary);">
+                                <MudIcon Icon="@Icons.Material.Rounded.AccountTree" />
+                            </MudAvatar>
+                        </div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">Stations recorded</MudText>
                     </MudPaper>
                 </MudItem>
 
                 <!-- Total Errors Card -->
                 <MudItem xs="6" sm="4" md="3">
-                    <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4"
-                              Style="@($"border-left-color: {(Errors.Count > 0 ? "var(--mud-palette-error)" : "var(--mud-palette-success)")} !important;")">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Errors</MudText>
-                        <MudText Typo="Typo.h5" Class="font-weight-bold" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)">
-                            @Errors.Count
+                    <MudPaper Elevation="0" Class="pa-4"
+                              Style="@($"border-radius: 14px; border: 1px solid {(Errors.Count > 0 ? "rgba(239,68,68,0.35)" : "rgba(16,185,129,0.35)")}; background: linear-gradient(135deg, {(Errors.Count > 0 ? "rgba(239,68,68,0.06)" : "rgba(16,185,129,0.06)")} 0%, var(--mud-palette-surface) 100%);")">
+                        <div class="d-flex justify-space-between align-start">
+                            <div>
+                                <MudText Typo="Typo.overline" Color="Color.Secondary" Style="line-height: 1.2;">Total Errors</MudText>
+                                <MudText Typo="Typo.h4" Class="font-weight-bold mt-2" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)">
+                                    @Errors.Count
+                                </MudText>
+                            </div>
+                            <MudAvatar Size="Size.Medium" Rounded="true"
+                                       Style="@($"background-color: {(Errors.Count > 0 ? "rgba(239,68,68,0.14)" : "rgba(16,185,129,0.14)")}; color: {(Errors.Count > 0 ? "#EF4444" : "#10B981")};")">
+                                <MudIcon Icon="@(Errors.Count > 0 ? Icons.Material.Rounded.ErrorOutline : Icons.Material.Rounded.Verified)" />
+                            </MudAvatar>
+                        </div>
+                        <MudText Typo="Typo.caption" Color="@(Errors.Count > 0 ? Color.Error : Color.Success)" Class="mt-2 d-block font-weight-medium">
+                            @(Errors.Count > 0 ? "Defects detected" : "Clean inspection")
                         </MudText>
                     </MudPaper>
                 </MudItem>
 
-                <!-- Dynamic Individual Card for EACH distinct error type detected -->
+                <!-- Dynamic Card per Error Type -->
                 @if (Errors.Count > 0)
                 {
                     @foreach (var group in Errors.GroupBy(e => e.ErrorType).OrderBy(g => g.Key))
                     {
+                        var hex = GetErrorHexColor(group.Key);
                         <MudItem xs="6" sm="4" md="3">
-                            <MudPaper Elevation="1" Class="pa-3 rounded-lg border-l-4"
-                                      Style="@($"border-left-color: {GetErrorHexColor(group.Key)} !important;")">
-                                <div class="d-flex justify-space-between align-center">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@GetErrorLabel(group.Key)</MudText>
-                                    <MudChip T="string" Size="Size.Small" Color="@GetErrorColor(group.Key)" Variant="Variant.Outlined">
-                                        Type @group.Key
-                                    </MudChip>
+                            <MudPaper Elevation="0" Class="pa-4"
+                                      Style="@($"border-radius: 14px; border: 1px solid var(--mud-palette-divider); background: linear-gradient(135deg, {hex}12 0%, var(--mud-palette-surface) 100%);")">
+                                <div class="d-flex justify-space-between align-start">
+                                    <div style="min-width: 0;">
+                                        <MudText Typo="Typo.overline" Color="Color.Secondary" Style="line-height: 1.2;">Type @group.Key</MudText>
+                                        <MudText Typo="Typo.h4" Class="font-weight-bold mt-2" Style="@($"color: {hex};")">
+                                            @group.Count()
+                                        </MudText>
+                                    </div>
+                                    <MudAvatar Size="Size.Medium" Rounded="true" Style="@($"background-color: {hex}20; color: {hex};")">
+                                        <MudIcon Icon="@Icons.Material.Rounded.BugReport" />
+                                    </MudAvatar>
                                 </div>
-                                <MudText Typo="Typo.h5" Class="font-weight-bold mt-1" Color="@GetErrorColor(group.Key)">
-                                    @group.Count()
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block text-truncate">
+                                    @GetErrorLabel(group.Key)
                                 </MudText>
                             </MudPaper>
                         </MudItem>
@@ -233,8 +398,8 @@
             </MudGrid>
         </div>
 
-        <!-- 3. EXPANDABLE TABLES (STACKED ONE ON TOP OF THE OTHER) -->
-        <MudExpansionPanels MultiExpansion="true" Elevation="1" Class="rounded-lg mt-2">
+        <!-- 3. EXPANDABLE INTERACTIVE DATA GRIDS -->
+        <MudExpansionPanels MultiExpansion="true" Elevation="1" Class="rounded-xl mt-2">
             <!-- PANEL 1: PROCESS HISTORY -->
             <MudExpansionPanel Expanded="true">
                 <TitleContent>
@@ -254,54 +419,76 @@
                     }
                     else
                     {
-                        <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0" Style="overflow-x: auto;">
-                            <thead>
-                                <tr>
-                                    <th>Reference</th>
-                                    <th>Travel Ticket</th>
-                                    <th>Station</th>
-                                    <th>2nd Label</th>
-                                    <th>3rd Travel Ticket</th>
-                                    <th>4th Travel Ticket</th>
-                                    <th>Final Label</th>
-                                    <th>Test Date</th>
-                                    <th>Reworked</th>
-                                    <th>Rework ID</th>
-                                    <th>Hostname</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var row in ProcessHistory)
+                        <MudDataGrid T="TraceabilityRecord"
+                                     Items="@ProcessHistory"
+                                     Dense="true"
+                                     Hover="true"
+                                     Striped="true"
+                                     Filterable="true"
+                                     FilterMode="DataGridFilterMode.ColumnFilterMenu"
+                                     Groupable="true"
+                                     SortMode="SortMode.Multiple"
+                                     QuickFilter="@_processQuickFilter"
+                                     HorizontalScrollbar="true"
+                                     Class="compact-grid"
+                                     Elevation="0">
+                            <ToolBarContent>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Use column menus to filter, sort, or group
+                                </MudText>
+                                <MudSpacer />
+                                <MudTextField @bind-Value="_processSearchString"
+                                              Placeholder="Search process history..."
+                                              Adornment="Adornment.Start"
+                                              Immediate="true"
+                                              AdornmentIcon="@Icons.Material.Rounded.Search"
+                                              IconSize="Size.Small"
+                                              Margin="Margin.Dense"
+                                              Variant="Variant.Outlined"
+                                              Style="max-width: 280px;" />
+                            </ToolBarContent>
+                            <Columns>
+                                <PropertyColumn Property="x => x.Reference" Title="Reference" />
+                                <PropertyColumn Property="x => x.TravelTicketLabel" Title="Travel Ticket" />
+                                <PropertyColumn Property="x => x.Station" Title="Station">
+                                    <CellTemplate>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.Item.Station</MudChip>
+                                    </CellTemplate>
+                                </PropertyColumn>
+                                <PropertyColumn Property="x => x.SecondLabel" Title="2nd Label" />
+                                @if (ShowThirdTravelTicket)
                                 {
-                                    <tr>
-                                        <td><strong>@row.Reference</strong></td>
-                                        <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
-                                        <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@row.Station</MudChip></td>
-                                        <td>@row.SecondLabel</td>
-                                        <td>@row.ThirdTravelTicketLabel</td>
-                                        <td>@row.FourthTravelTicketLabel</td>
-                                        <td><span class="font-monospace">@row.FinalLabel</span></td>
-                                        <td>@row.TestDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
-                                        <td>
-                                            @if (IsReworked(row.Reworked))
-                                            {
-                                                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
-                                                    @(row.Reworked?.ToString() ?? "YES")
-                                                </MudChip>
-                                            }
-                                            else
-                                            {
-                                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
-                                                    @(string.IsNullOrWhiteSpace(row.Reworked?.ToString()) ? "NO" : row.Reworked?.ToString())
-                                                </MudChip>
-                                            }
-                                        </td>
-                                        <td>@(string.IsNullOrWhiteSpace(row.ReworkId?.ToString()) ? "-" : row.ReworkId)</td>
-                                        <td>@row.Hostname</td>
-                                    </tr>
+                                    <PropertyColumn Property="x => x.ThirdTravelTicketLabel" Title="3rd Travel Ticket" />
                                 }
-                            </tbody>
-                        </MudSimpleTable>
+                                @if (ShowFourthTravelTicket)
+                                {
+                                    <PropertyColumn Property="x => x.FourthTravelTicketLabel" Title="4th Travel Ticket" />
+                                }
+                                <PropertyColumn Property="x => x.FinalLabel" Title="Final Label" />
+                                <PropertyColumn Property="x => x.TestDate" Title="Test Date" Format="dd-MM-yyyy HH:mm:ss" />
+                                <PropertyColumn Property="x => x.Reworked" Title="Reworked">
+                                    <CellTemplate>
+                                        @if (IsReworked(context.Item.Reworked))
+                                        {
+                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                                                @(context.Item.Reworked ?? "YES")
+                                            </MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
+                                                @(string.IsNullOrWhiteSpace(context.Item.Reworked) ? "NO" : context.Item.Reworked)
+                                            </MudChip>
+                                        }
+                                    </CellTemplate>
+                                </PropertyColumn>
+                                <PropertyColumn Property="x => x.ReworkId" Title="Rework ID" />
+                                <PropertyColumn Property="x => x.Hostname" Title="Hostname" />
+                            </Columns>
+                            <PagerContent>
+                                <MudDataGridPager T="TraceabilityRecord" />
+                            </PagerContent>
+                        </MudDataGrid>
                     }
                 </ChildContent>
             </MudExpansionPanel>
@@ -328,59 +515,65 @@
                     }
                     else
                     {
-                        <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0" Style="overflow-x: auto;">
-                            <thead>
-                                <tr>
-                                    <th>Reference</th>
-                                    <th>Batch</th>
-                                    <th>Travel Ticket</th>
-                                    <th>Worker ID</th>
-                                    <th>Error Type</th>
-                                    <th>TMP 01</th>
-                                    <th>TMP 02</th>
-                                    <th>Object</th>
-                                    <th>Wire1</th>
-                                    <th>Wire2</th>
-                                    <th>Way</th>
-                                    <th>Start Date</th>
-                                    <th>End Date</th>
-                                    <th>Time U</th>
-                                    <th>CPV1</th>
-                                    <th>CPV2</th>
-                                    <th>CPV3</th>
-                                    <th>CPV4</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var row in Errors)
-                                {
-                                    <tr>
-                                        <td><strong>@row.Reference</strong></td>
-                                        <td>@row.Batch</td>
-                                        <td><span class="font-monospace">@row.TravelTicketLabel</span></td>
-                                        <td>@row.WorkerId</td>
-                                        <td>
-                                            <MudChip T="string" Color="@GetErrorColor(row.ErrorType)" Size="Size.Small" Variant="Variant.Filled">
-                                                @GetErrorLabel(row.ErrorType)
-                                            </MudChip>
-                                        </td>
-                                        <td>@row.Tmp01</td>
-                                        <td>@row.Tmp02</td>
-                                        <td>@row.Object</td>
-                                        <td>@row.Wire1</td>
-                                        <td>@row.Wire2</td>
-                                        <td>@row.Way</td>
-                                        <td>@row.StartDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
-                                        <td>@row.EndDate.ToString("dd-MM-yyyy HH:mm:ss")</td>
-                                        <td>@row.TimeU</td>
-                                        <td>@row.CPV1</td>
-                                        <td>@row.CPV2</td>
-                                        <td>@row.CPV3</td>
-                                        <td>@row.CPV4</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </MudSimpleTable>
+                        <MudDataGrid T="SolvedErrorRecord"
+                                     Items="@Errors"
+                                     Dense="true"
+                                     Hover="true"
+                                     Striped="true"
+                                     Filterable="true"
+                                     FilterMode="DataGridFilterMode.ColumnFilterMenu"
+                                     Groupable="true"
+                                     SortMode="SortMode.Multiple"
+                                     QuickFilter="@_errorQuickFilter"
+                                     HorizontalScrollbar="true"
+                                     Class="compact-grid"
+                                     Elevation="0">
+                            <ToolBarContent>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Use column menus to filter, sort, or group
+                                </MudText>
+                                <MudSpacer />
+                                <MudTextField @bind-Value="_errorSearchString"
+                                              Placeholder="Search error details..."
+                                              Adornment="Adornment.Start"
+                                              Immediate="true"
+                                              AdornmentIcon="@Icons.Material.Rounded.Search"
+                                              IconSize="Size.Small"
+                                              Margin="Margin.Dense"
+                                              Variant="Variant.Outlined"
+                                              Style="max-width: 280px;" />
+                            </ToolBarContent>
+                            <Columns>
+                                <PropertyColumn Property="x => x.Reference" Title="Reference" />
+                                <PropertyColumn Property="x => x.Batch" Title="Batch" />
+                                <PropertyColumn Property="x => x.TravelTicketLabel" Title="Travel Ticket" />
+                                <PropertyColumn Property="x => x.WorkerId" Title="Worker ID" />
+                                <PropertyColumn Property="x => x.ErrorType" Title="Error Type">
+                                    <CellTemplate>
+                                        <MudChip T="string" Color="@GetErrorColor(context.Item.ErrorType)" Size="Size.Small" Variant="Variant.Filled">
+                                            @GetErrorLabel(context.Item.ErrorType)
+                                        </MudChip>
+                                    </CellTemplate>
+                                </PropertyColumn>
+                                <PropertyColumn Property="x => x.Tmp01" Title="TMP 01" />
+                                <PropertyColumn Property="x => x.Tmp02" Title="TMP 02" />
+                                <PropertyColumn Property="x => x.Object" Title="Object" />
+                                <PropertyColumn Property="x => x.Wire1" Title="Wire 1" />
+                                <PropertyColumn Property="x => x.Wire2" Title="Wire 2" />
+                                <PropertyColumn Property="x => x.Way" Title="Way" />
+                                <PropertyColumn Property="x => x.StartDate" Title="Start Date" Format="dd-MM-yyyy HH:mm:ss" />
+                                <PropertyColumn Property="x => x.EndDate" Title="End Date" Format="dd-MM-yyyy HH:mm:ss" />
+                                <PropertyColumn Property="x => x.TimeU" Title="Time U" />
+                                <PropertyColumn Property="x => x.CPV1" Title="CPV1" />
+                                <PropertyColumn Property="x => x.CPV2" Title="CPV2" />
+                                <PropertyColumn Property="x => x.CPV3" Title="CPV3" />
+                                <PropertyColumn Property="x => x.CPV4" Title="CPV4" />
+                                <PropertyColumn Property="x => x.Hostname" Title="Hostname" />
+                            </Columns>
+                            <PagerContent>
+                                <MudDataGridPager T="SolvedErrorRecord" />
+                            </PagerContent>
+                        </MudDataGrid>
                     }
                 </ChildContent>
             </MudExpansionPanel>
@@ -389,7 +582,7 @@
     else if (!IsLoading)
     {
         <!-- 4. EMPTY / READY STATE -->
-        <MudPaper Elevation="0" Class="pa-12 d-flex flex-column align-center justify-center rounded-lg border-2 border-dashed">
+        <MudPaper Elevation="0" Class="pa-12 d-flex flex-column align-center justify-center rounded-xl border-2 border-dashed">
             <MudAvatar Size="Size.Large" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
                 <MudIcon Icon="@Icons.Material.Rounded.QrCodeScanner" Size="Size.Large" />
             </MudAvatar>
@@ -409,13 +602,49 @@
     private bool IsLoading = false;
     private bool _hasSearched = false;
 
-    private string _loadingTitle = "Initializing search...";
+    private int _loadingStep = 1;
+    private string _loadingTitle = "Checking Harness...";
     private string _loadingSubtitle = "Please wait";
 
     private string SearchValue = string.Empty;
     private bool IsFinalLabel = true;
     private bool IncludeAllErrors = true;
     private string _selectedSite = string.Empty;
+
+    private string _processSearchString = string.Empty;
+    private string _errorSearchString = string.Empty;
+
+    private bool ShowThirdTravelTicket => ProcessHistory.Any(x => !string.IsNullOrWhiteSpace(x.ThirdTravelTicketLabel));
+    private bool ShowFourthTravelTicket => ProcessHistory.Any(x => !string.IsNullOrWhiteSpace(x.FourthTravelTicketLabel));
+
+    private Func<TraceabilityRecord, bool> _processQuickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_processSearchString))
+            return true;
+
+        return (x.Reference?.Contains(_processSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.TravelTicketLabel?.Contains(_processSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Station?.Contains(_processSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.FinalLabel?.Contains(_processSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Hostname?.Contains(_processSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.ReworkId?.Contains(_processSearchString, StringComparison.OrdinalIgnoreCase) ?? false);
+    };
+
+    private Func<SolvedErrorRecord, bool> _errorQuickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_errorSearchString))
+            return true;
+
+        return (x.Reference?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Batch?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.TravelTicketLabel?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.WorkerId?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || GetErrorLabel(x.ErrorType).Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase)
+            || (x.Object?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Wire1?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Wire2?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Hostname?.Contains(_errorSearchString, StringComparison.OrdinalIgnoreCase) ?? false);
+    };
 
     private List<string> AvailableSites
     {
@@ -500,10 +729,13 @@
         ProcessHistory.Clear();
         Errors.Clear();
         _harnessInfo = null;
+        _processSearchString = string.Empty;
+        _errorSearchString = string.Empty;
         _hasSearched = false;
+        _loadingStep = 1;
         IsLoading = true;
         _loadingTitle = $"Checking {labelType}...";
-        _loadingSubtitle = $"Validating {trimmedInput} on site {SelectedSite}";
+        _loadingSubtitle = $"{trimmedInput} • Site {SelectedSite}";
         await InvokeAsync(StateHasChanged);
 
         using var cts = new CancellationTokenSource();
@@ -552,21 +784,18 @@
     {
         try
         {
-            await Task.Delay(700, token);
+            await Task.Delay(600, token);
+            _loadingStep = 2;
             _loadingTitle = "Collecting Process History...";
-            _loadingSubtitle = $"Retrieving station records for {labelType} ({value})";
+            _loadingSubtitle = $"Querying {labelType}: {value}";
             await InvokeAsync(StateHasChanged);
 
-            await Task.Delay(900, token);
-            _loadingTitle = "Collecting Error & Test Details...";
+            await Task.Delay(800, token);
+            _loadingStep = 3;
+            _loadingTitle = "Collecting Error Details...";
             _loadingSubtitle = IncludeAllErrors
-                ? "Checking electrical test window & defects..."
-                : "Checking all recorded defects...";
-            await InvokeAsync(StateHasChanged);
-
-            await Task.Delay(900, token);
-            _loadingTitle = "Finalizing Traceability Summary...";
-            _loadingSubtitle = "Preparing process, family, and error details";
+                ? "Checking electrical test window & defects"
+                : "Checking all recorded defects";
             await InvokeAsync(StateHasChanged);
         }
         catch (TaskCanceledException)
@@ -580,6 +809,8 @@
         ProcessHistory.Clear();
         Errors.Clear();
         _harnessInfo = null;
+        _processSearchString = string.Empty;
+        _errorSearchString = string.Empty;
         _hasSearched = false;
         _searchInput?.FocusAsync();
     }

@@ -62,30 +62,43 @@ public class TraceabilityService : ITraceabilityService
             searchKeys.Add(request.SearchValue);
         }
 
-        // 1. Resolve Customer / Project / Family / Line (matching Form1.GetHarnessFamilyInformation)
-        result.HarnessInformation = await ResolveHarnessInformationAsync(
+        // Deduplicate ET station (Host, TestDate) pairs to avoid redundant SQL calls
+        var distinctEtTargets = result.ProcessHistory
+            .Where(r => IsEtStation(r.Station) && !string.IsNullOrWhiteSpace(r.Hostname))
+            .Select(r => (Host: r.Hostname.Split('/')[0].Trim(), r.TestDate))
+            .Distinct()
+            .ToList();
+
+        // Run Family resolution and Error resolution in parallel
+        var familyTask = ResolveHarnessInformationAsync(
             request.Site,
             request.SearchValue,
-            result.ProcessHistory);
+            distinctEtTargets);
 
-        // 2. Resolve Errors (matching Form1 ET_Errors date-range vs SelvedError direct lookup)
-        if (request.IncludeAllErrors)
-        {
-            result.Errors = await GetEtDateRangeErrorsAsync(request.Site, result.ProcessHistory);
+        var errorsTask = request.IncludeAllErrors
+            ? GetEtDateRangeErrorsWithFallbackAsync(request.Site, distinctEtTargets, searchKeys)
+            : GetDirectErrorsByKeysAsync(request.Site, searchKeys);
 
-            // Fallback to direct key lookup if ET date-range returned nothing
-            if (result.Errors.Count == 0)
-            {
-                result.Errors = await GetDirectErrorsByKeysAsync(request.Site, searchKeys);
-            }
-        }
-        else
-        {
-            result.Errors = await GetDirectErrorsByKeysAsync(request.Site, searchKeys);
-        }
+        await Task.WhenAll(familyTask, errorsTask);
 
+        result.HarnessInformation = await familyTask;
+        result.Errors = GroupErrorRecords(await errorsTask);
+        result.ProcessHistory = GroupProcessHistory(result.ProcessHistory);
         result.ErrorSearchKeys = searchKeys;
+
         return result;
+    }
+
+    private async Task<List<SolvedErrorRecord>> GetEtDateRangeErrorsWithFallbackAsync(
+        string site,
+        List<(string Host, DateTime TestDate)> etTargets,
+        List<string> searchKeys)
+    {
+        var etErrors = await GetEtDateRangeErrorsAsync(site, etTargets);
+        if (etErrors.Count > 0)
+            return etErrors;
+
+        return await GetDirectErrorsByKeysAsync(site, searchKeys);
     }
 
     private async Task<List<SolvedErrorRecord>> GetDirectErrorsByKeysAsync(string site, List<string> searchKeys)
@@ -101,44 +114,46 @@ public class TraceabilityService : ITraceabilityService
         return new List<SolvedErrorRecord>();
     }
 
-    private async Task<List<SolvedErrorRecord>> GetEtDateRangeErrorsAsync(string site, List<TraceabilityRecord> history)
+    private async Task<List<SolvedErrorRecord>> GetEtDateRangeErrorsAsync(
+        string site,
+        List<(string Host, DateTime TestDate)> etTargets)
     {
-        var allErrors = new List<SolvedErrorRecord>();
+        if (etTargets.Count == 0)
+            return new List<SolvedErrorRecord>();
 
-        foreach (var row in history.Where(r => IsEtStation(r.Station) && !string.IsNullOrWhiteSpace(r.Hostname)))
+        var tasks = etTargets.Select(async target =>
         {
-            var host = row.Hostname.Split('/')[0].Trim();
-            var dates = await _repository.GetTestDatesAsync(site, host, row.TestDate);
+            var dates = await _repository.GetTestDatesAsync(site, target.Host, target.TestDate);
             if (dates is null)
-                continue;
+                return new List<SolvedErrorRecord>();
 
-            if ((row.TestDate - dates.Value.DateBegin).TotalHours > 5)
-                continue;
+            if ((target.TestDate - dates.Value.DateBegin).TotalHours > 5)
+                return new List<SolvedErrorRecord>();
 
-            var errors = await _repository.GetErrorsByDateAsync(
+            return await _repository.GetErrorsByDateAsync(
                 site,
-                host,
+                target.Host,
                 dates.Value.DateBegin,
                 dates.Value.DateEnd);
+        });
 
-            if (errors.Count > 0)
-            {
-                allErrors.AddRange(errors);
-            }
-        }
-
-        return allErrors;
+        var results = await Task.WhenAll(tasks);
+        return results.SelectMany(x => x).ToList();
     }
 
     private async Task<HarnessInformation?> ResolveHarnessInformationAsync(
         string site,
         string serialNumber,
-        List<TraceabilityRecord> history)
+        List<(string Host, DateTime TestDate)> etTargets)
     {
-        foreach (var row in history.Where(r => IsEtStation(r.Station) && !string.IsNullOrWhiteSpace(r.Hostname)))
+        if (etTargets.Count == 0)
+            return null;
+
+        var bankTasks = etTargets.Select(t => _repository.GetStationFamilyAsync(site, t.Host, t.TestDate));
+        var banks = await Task.WhenAll(bankTasks);
+
+        foreach (var bank in banks)
         {
-            var host = row.Hostname.Split('/')[0].Trim();
-            var bank = await _repository.GetStationFamilyAsync(site, host, row.TestDate);
             if (string.IsNullOrWhiteSpace(bank))
                 continue;
 
@@ -170,6 +185,112 @@ public class TraceabilityService : ITraceabilityService
         }
 
         return null;
+    }
+
+    private static List<TraceabilityRecord> GroupProcessHistory(List<TraceabilityRecord> records)
+    {
+        if (records.Count <= 1)
+            return records;
+
+        return records
+            .GroupBy(r => new
+            {
+                Reference = r.Reference ?? string.Empty,
+                TravelTicketLabel = r.TravelTicketLabel ?? string.Empty,
+                Station = r.Station ?? string.Empty,
+                SecondLabel = r.SecondLabel ?? string.Empty,
+                ThirdTravelTicketLabel = r.ThirdTravelTicketLabel ?? string.Empty,
+                FourthTravelTicketLabel = r.FourthTravelTicketLabel ?? string.Empty,
+                FinalLabel = r.FinalLabel ?? string.Empty,
+                r.TestDate,
+                Reworked = r.Reworked ?? string.Empty,
+                ReworkId = r.ReworkId ?? string.Empty
+            })
+            .Select(g =>
+            {
+                var first = g.First();
+                var hostnames = g
+                    .Select(x => x.Hostname?.Trim())
+                    .Where(h => !string.IsNullOrWhiteSpace(h))
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                return new TraceabilityRecord
+                {
+                    Reference = first.Reference,
+                    TravelTicketLabel = first.TravelTicketLabel,
+                    Station = first.Station,
+                    SecondLabel = first.SecondLabel,
+                    ThirdTravelTicketLabel = first.ThirdTravelTicketLabel,
+                    FourthTravelTicketLabel = first.FourthTravelTicketLabel,
+                    FinalLabel = first.FinalLabel,
+                    TestDate = first.TestDate,
+                    Reworked = first.Reworked,
+                    ReworkId = first.ReworkId,
+                    Hostname = string.Join(" / ", hostnames)
+                };
+            })
+            .ToList();
+    }
+
+    private static List<SolvedErrorRecord> GroupErrorRecords(List<SolvedErrorRecord> errors)
+    {
+        if (errors.Count <= 1)
+            return errors;
+
+        return errors
+            .GroupBy(e => new
+            {
+                Reference = e.Reference ?? string.Empty,
+                Batch = e.Batch ?? string.Empty,
+                TravelTicketLabel = e.TravelTicketLabel ?? string.Empty,
+                WorkerId = e.WorkerId ?? string.Empty,
+                e.ErrorType,
+                Tmp01 = e.Tmp01 ?? string.Empty,
+                Tmp02 = e.Tmp02 ?? string.Empty,
+                Object = e.Object ?? string.Empty,
+                Wire1 = e.Wire1 ?? string.Empty,
+                Wire2 = e.Wire2 ?? string.Empty,
+                Way = e.Way ?? string.Empty,
+                e.StartDate,
+                e.EndDate,
+                e.TimeU,
+                CPV1 = e.CPV1 ?? string.Empty,
+                CPV2 = e.CPV2 ?? string.Empty,
+                CPV3 = e.CPV3 ?? string.Empty,
+                CPV4 = e.CPV4 ?? string.Empty
+            })
+            .Select(g =>
+            {
+                var first = g.First();
+                var hostnames = g
+                    .Select(x => x.Hostname?.Trim())
+                    .Where(h => !string.IsNullOrWhiteSpace(h))
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                return new SolvedErrorRecord
+                {
+                    Reference = first.Reference,
+                    Batch = first.Batch,
+                    TravelTicketLabel = first.TravelTicketLabel,
+                    WorkerId = first.WorkerId,
+                    ErrorType = first.ErrorType,
+                    Tmp01 = first.Tmp01,
+                    Tmp02 = first.Tmp02,
+                    Object = first.Object,
+                    Wire1 = first.Wire1,
+                    Wire2 = first.Wire2,
+                    Way = first.Way,
+                    StartDate = first.StartDate,
+                    EndDate = first.EndDate,
+                    TimeU = first.TimeU,
+                    CPV1 = first.CPV1,
+                    CPV2 = first.CPV2,
+                    CPV3 = first.CPV3,
+                    CPV4 = first.CPV4,
+                    Hostname = string.Join(" / ", hostnames)
+                };
+            })
+            .ToList();
     }
 
     private static bool IsEtStation(string? station)
