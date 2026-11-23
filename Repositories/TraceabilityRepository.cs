@@ -1,4 +1,5 @@
-﻿using Dapper;
+using System.Data;
+using Dapper;
 using HT_Web.Data;
 using HT_Web.Models.Traceability;
 
@@ -274,5 +275,34 @@ AND (
                 commandTimeout: 300));
 
         return result.ToList();
+    }
+    public async Task LogTrackingAsync(
+        string serialNumber,
+        string site,
+        string username,
+        DateTime timestamp,
+        string additionalInfo,
+        string type)
+    {
+        using var connection = _connectionFactory.CreateTrackingLogConnection();
+        if (connection is null)
+            return;
+
+        await connection.OpenAsync();
+
+        var parameters = new DynamicParameters();
+        parameters.Add("@SerialNumber", serialNumber, DbType.String);
+        parameters.Add("@Site", site, DbType.String);
+        parameters.Add("@Username", username, DbType.String);
+        parameters.Add("@DateTime", timestamp, DbType.DateTime);
+        parameters.Add("@AdditionalInfo", additionalInfo, DbType.String);
+        parameters.Add("@Type", type, DbType.String);
+
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "sp_InsertTrackingLog",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 30));
     }
 }

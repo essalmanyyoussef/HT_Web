@@ -35,4 +35,11 @@ public interface ITraceabilityRepository
         string hostname,
         DateTime dateBegin,
         DateTime dateEnd);
+    Task LogTrackingAsync(
+        string serialNumber,
+        string site,
+        string username,
+        DateTime timestamp,
+        string additionalInfo,
+        string type);
 }

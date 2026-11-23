@@ -735,7 +735,7 @@ Razor CSHTML
         _loadingStep = 1;
         IsLoading = true;
         _loadingTitle = $"Checking {labelType}...";
-        _loadingSubtitle = $"{trimmedInput} • Site {SelectedSite}";
+        _loadingSubtitle = $"{trimmedInput} ï¿½ Site {SelectedSite}";
         await InvokeAsync(StateHasChanged);
 
         using var cts = new CancellationTokenSource();
@@ -748,7 +748,8 @@ Razor CSHTML
                 SearchValue = trimmedInput,
                 IsFinalLabel = IsFinalLabel,
                 IncludeAllErrors = IncludeAllErrors,
-                Site = SelectedSite
+                Site = SelectedSite,
+                Username = AppState.CurrentUser?.DisplayName ?? Environment.UserName
             };
 
             var result = await TraceabilityService.SearchAsync(request);

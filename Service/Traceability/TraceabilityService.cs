@@ -86,6 +86,25 @@ public class TraceabilityService : ITraceabilityService
         result.ProcessHistory = GroupProcessHistory(result.ProcessHistory);
         result.ErrorSearchKeys = searchKeys;
 
+        try
+        {
+            var searchType = request.IsFinalLabel ? "Final Label" : "Travel Ticket";
+            var user = string.IsNullOrWhiteSpace(request.Username) ? "Unknown" : request.Username;
+            var info = $"Steps: {result.ProcessHistory.Count}, Errors: {result.Errors.Count} - HT_Web";
+
+            await _repository.LogTrackingAsync(
+                request.SearchValue,
+                request.Site,
+                user,
+                DateTime.Now,
+                info,
+                searchType);
+        }
+        catch
+        {
+            // Keep search working even if tracking log fails
+        }
+
         return result;
     }
 
