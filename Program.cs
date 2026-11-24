@@ -22,6 +22,7 @@ builder.Services.AddScoped<ITraceabilityRepository,
 
 builder.Services.AddScoped<ITraceabilityService,
     TraceabilityService>();
+builder.Services.AddScoped<VisionReportService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -43,6 +44,16 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapGet("/api/vision-report", async (string hostname, DateTime testDate, VisionReportService visionService) =>
+{
+    var (filePath, errorMessage) = visionService.FindVisionReport(hostname, testDate);
+    if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        return Results.NotFound(errorMessage ?? "Vision report not found.");
+
+    var bytes = await File.ReadAllBytesAsync(filePath);
+    return Results.File(bytes, "application/pdf");
+});
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

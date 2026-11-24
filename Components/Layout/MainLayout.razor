@@ -13,6 +13,32 @@
 <MudDialogProvider CloseButton="true" CloseOnEscapeKey="true" MaxWidth="MaxWidth.Medium" />
 <MudSnackbarProvider AnchorOrigin="SnackbarOrigin.BottomRight" />
 
+<!-- Initial Access & Site Verification Overlay (prevents freeze on first load) -->
+<MudOverlay Visible="@AppState.IsCheckingAccess" DarkBackground="true" Absolute="false" ZIndex="9999"
+            Style="backdrop-filter: blur(8px);">
+    <MudPaper Elevation="0" Class="pa-7 rounded-xl"
+              Style="min-width: 360px; max-width: 440px; background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(56, 189, 248, 0.3); color: #F8FAFC;">
+        <div class="d-flex align-center gap-4 mb-4">
+            <div class="d-flex align-center justify-center rounded-lg"
+                 style="width: 48px; height: 48px; background: linear-gradient(135deg, #0066CC, #38BDF8);">
+                <MudProgressCircular Color="Color.Inherit" Indeterminate="true" Size="Size.Small" Style="color: white;" />
+            </div>
+            <div>
+                <MudText Typo="Typo.overline" Style="color: #38BDF8; letter-spacing: 0.08em;">
+                    SEWS MES TRACEABILITY
+                </MudText>
+                <MudText Typo="Typo.h6" Class="font-weight-bold" Style="color: #FFFFFF; line-height: 1.2;">
+                    Verifying User Access
+                </MudText>
+            </div>
+        </div>
+        <MudText Typo="Typo.body2" Style="color: #CBD5E1;" Class="mb-3">
+            @AppState.AccessStatusMessage
+        </MudText>
+        <MudProgressLinear Color="Color.Info" Indeterminate="true" Rounded="true" Size="Size.Small" />
+    </MudPaper>
+</MudOverlay>
+
 <MudLayout>
     <MudAppBar Elevation="1" Dense="false" Class="px-4">
         <MudIconButton Icon="@Icons.Material.Rounded.Menu"
@@ -34,7 +60,7 @@
         <MudSpacer />
 
         <!-- Active Site Indicator -->
-        @if (AppState.CurrentUser != null)
+        @if (AppState.CurrentUser != null && !string.IsNullOrWhiteSpace(AppState.CurrentUser.SelectedSite))
         {
             <MudChip T="string"
                      Color="Color.Secondary"
@@ -42,7 +68,7 @@
                      Size="Size.Small"
                      Icon="@Icons.Material.Rounded.LocationOn"
                      Class="mr-3 font-weight-bold">
-                @(AppState.CurrentUser.SelectedSite ?? "MFZ")
+                @AppState.CurrentUser.SelectedSite
             </MudChip>
         }
 
@@ -68,7 +94,7 @@
                             @AppState.CurrentUser.DisplayName
                         </MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            Site: @(AppState.CurrentUser.SelectedSite ?? "MFZ")
+                            Site: @(AppState.CurrentUser.SelectedSite ?? "None")
                         </MudText>
                     </div>
                     <MudDivider />
@@ -99,16 +125,24 @@
     private bool _drawerOpen = true;
     private bool _isDarkMode = false;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
         AppState.OnChange += HandleStateChanged;
+    }
 
-        if (AppState.CurrentUser == null)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && AppState.CurrentUser == null)
         {
+            AppState.SetCheckingAccess(true, "Checking Active Directory identity & authorized sites...");
             var user = await UserAccessService.GetCurrentUserAsync();
             if (user != null)
             {
                 AppState.SetCurrentUser(user);
+            }
+            else
+            {
+                AppState.SetCheckingAccess(false);
             }
         }
     }

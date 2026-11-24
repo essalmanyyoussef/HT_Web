@@ -297,6 +297,7 @@ AND (
         parameters.Add("@DateTime", timestamp, DbType.DateTime);
         parameters.Add("@AdditionalInfo", additionalInfo, DbType.String);
         parameters.Add("@Type", type, DbType.String);
+ parameters.Add("@outer", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
         await connection.ExecuteAsync(
             new CommandDefinition(
@@ -304,5 +305,106 @@ AND (
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 commandTimeout: 30));
+    }
+    public async Task<TrackingStatisticsResult> GetTrackingStatisticsAsync(
+        DateTime startDate,
+        DateTime endDate,
+        string? siteFilter,
+        List<string> allowedSites)
+    {
+        var result = new TrackingStatisticsResult();
+        if (allowedSites.Count == 0)
+            return result;
+
+        using var connection = _connectionFactory.CreateTrackingLogConnection();
+        if (connection is null)
+            throw new InvalidOperationException("TrackingLog connection string is not configured.");
+
+        await connection.OpenAsync();
+
+        var endInclusive = endDate.Date.AddDays(1).AddTicks(-1);
+        var targetSites = !string.IsNullOrWhiteSpace(siteFilter) && siteFilter != "ALL"
+            ? new List<string> { siteFilter }
+            : allowedSites;
+
+        const string summarySql = @"
+SELECT
+    COUNT(*) AS TotalSearches,
+    COUNT(DISTINCT NULLIF(LTRIM(RTRIM([Username])), '')) AS DistinctUsersCount
+FROM dbo.HT_Tracking_Log WITH (NOLOCK)
+WHERE [DateTime] BETWEEN @StartDate AND @EndDate
+  AND [Site] IN @TargetSites;";
+
+        var summary = await connection.QueryFirstOrDefaultAsync<TrackingStatisticsResult>(
+            new CommandDefinition(
+                summarySql,
+                new { StartDate = startDate.Date, EndDate = endInclusive, TargetSites = targetSites },
+                commandTimeout: 60));
+
+        if (summary is not null)
+        {
+            result.TotalSearches = summary.TotalSearches;
+            result.DistinctUsersCount = summary.DistinctUsersCount;
+        }
+
+        const string dailySql = @"
+SELECT
+    CAST([DateTime] AS DATE) AS [Date],
+    COUNT(*) AS TotalCount,
+    COUNT(DISTINCT NULLIF(LTRIM(RTRIM([Username])), '')) AS DistinctUsersCount
+FROM dbo.HT_Tracking_Log WITH (NOLOCK)
+WHERE [DateTime] BETWEEN @StartDate AND @EndDate
+  AND [Site] IN @TargetSites
+GROUP BY CAST([DateTime] AS DATE)
+ORDER BY [Date] ASC;";
+
+        result.DailyStats = (await connection.QueryAsync<DailyTrackingStat>(
+            new CommandDefinition(
+                dailySql,
+                new { StartDate = startDate.Date, EndDate = endInclusive, TargetSites = targetSites },
+                commandTimeout: 60))).ToList();
+
+        const string siteSql = @"
+SELECT
+    ISNULL(NULLIF(LTRIM(RTRIM([Site])), ''), 'Unknown') AS [Site],
+    COUNT(*) AS TotalCount,
+    COUNT(DISTINCT NULLIF(LTRIM(RTRIM([Username])), '')) AS DistinctUsersCount
+FROM dbo.HT_Tracking_Log WITH (NOLOCK)
+WHERE [DateTime] BETWEEN @StartDate AND @EndDate
+  AND [Site] IN @TargetSites
+GROUP BY ISNULL(NULLIF(LTRIM(RTRIM([Site])), ''), 'Unknown')
+ORDER BY TotalCount DESC;";
+
+        var sites = (await connection.QueryAsync<SiteTrackingStat>(
+            new CommandDefinition(
+                siteSql,
+                new { StartDate = startDate.Date, EndDate = endInclusive, TargetSites = targetSites },
+                commandTimeout: 60))).ToList();
+
+        foreach (var s in sites)
+        {
+            s.SharePercent = result.TotalSearches > 0
+                ? Math.Round(s.TotalCount * 100.0 / result.TotalSearches, 1)
+                : 0;
+        }
+        result.SiteStats = sites;
+
+        const string hourlySql = @"
+SELECT
+    DATEPART(HOUR, [DateTime]) AS [Hour],
+    COUNT(*) AS TotalCount
+FROM dbo.HT_Tracking_Log WITH (NOLOCK)
+WHERE [DateTime] BETWEEN @StartDate AND @EndDate
+  AND [Site] IN @TargetSites
+GROUP BY DATEPART(HOUR, [DateTime])
+ORDER BY [Hour] ASC;";
+
+        result.HourlyStats = (await connection.QueryAsync<HourlyTrackingStat>(
+            new CommandDefinition(
+                hourlySql,
+                new { StartDate = startDate.Date, EndDate = endInclusive, TargetSites = targetSites },
+                commandTimeout: 60))).ToList();
+
+        return result;
     }
 }

@@ -6,6 +6,7 @@ namespace HT_Web.Services.Traceability;
 public class TraceabilityService : ITraceabilityService
 {
     private readonly ITraceabilityRepository _repository;
+ private readonly ILogger<TraceabilityService> _logger;
 
     public TraceabilityService(ITraceabilityRepository repository)
     {

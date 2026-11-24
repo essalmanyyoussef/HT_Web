@@ -7,10 +7,13 @@ Razor CSHTML
 @using HT_Web.Services.Traceability
 @using MudBlazor
 @using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
 
 @inject ITraceabilityService TraceabilityService
 @inject ApplicationState AppState
 @inject ISnackbar Snackbar
+@inject VisionReportService VisionReportService
+@inject IJSRuntime JS
 
 <PageTitle>Harness Traceability</PageTitle>
 
@@ -484,6 +487,20 @@ Razor CSHTML
                                 </PropertyColumn>
                                 <PropertyColumn Property="x => x.ReworkId" Title="Rework ID" />
                                 <PropertyColumn Property="x => x.Hostname" Title="Hostname" />
+                                <TemplateColumn T="TraceabilityRecord" Title="Vision Report" Sortable="false" Filterable="false">
+                                    <CellTemplate>
+                                        @if (IsVisionStation(context.Item.Station))
+                                        {
+                                            <MudButton Variant="Variant.Text"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Rounded.PictureAsPdf"
+                                                       OnClick="@(() => OpenVisionReportAsync(context.Item))">
+                                                Open Report
+                                            </MudButton>
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
                             </Columns>
                             <PagerContent>
                                 <MudDataGridPager T="TraceabilityRecord" />
@@ -861,6 +878,25 @@ Razor CSHTML
         11 => "Bad End (11)",
         _ => $"Type {errorType}"
     };
+
+    private static bool IsVisionStation(string? station)
+    {
+        return !string.IsNullOrWhiteSpace(station)
+            && station.Contains("Vision", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task OpenVisionReportAsync(TraceabilityRecord record)
+    {
+        var (filePath, errorMessage) = VisionReportService.FindVisionReport(record.Hostname, record.TestDate);
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            Snackbar.Add(errorMessage ?? "The PDF report does not exist.", Severity.Warning);
+            return;
+        }
+
+        var url = $"/api/vision-report?hostname={Uri.EscapeDataString(record.Hostname ?? string.Empty)}&testDate={Uri.EscapeDataString(record.TestDate.ToString("O"))}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
 
     public void Dispose()
     {

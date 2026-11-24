@@ -35,6 +35,7 @@ public interface ITraceabilityRepository
         string hostname,
         DateTime dateBegin,
         DateTime dateEnd);
+
     Task LogTrackingAsync(
         string serialNumber,
         string site,
@@ -42,4 +43,10 @@ public interface ITraceabilityRepository
         DateTime timestamp,
         string additionalInfo,
         string type);
+
+    Task<TrackingStatisticsResult> GetTrackingStatisticsAsync(
+        DateTime startDate,
+        DateTime endDate,
+        string? siteFilter,
+        List<string> allowedSites);
 }
