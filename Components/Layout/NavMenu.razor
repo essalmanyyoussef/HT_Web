@@ -1,38 +1,407 @@
-<div class="pa-4 d-flex align-center">
-    <MudIcon Icon="@Icons.Material.Rounded.AccountTree" Color="Color.Primary" Class="mr-2" />
-    <MudText Typo="Typo.subtitle1" Class="font-weight-bold" Color="Color.Primary">
-        Navigation
-    </MudText>
+@implements IDisposable
+
+@using MudBlazor
+@using HT_Web.Services.State
+
+@inject NavigationManager NavigationManager
+@inject ApplicationState AppState
+
+<style>
+    .glass-sidebar {
+        position: relative;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        padding: 14px 10px;
+        background: rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+        border-right: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 4px 0 24px -10px rgba(10, 37, 64, 0.08);
+        transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+        user-select: none;
+    }
+
+    .glass-sidebar.dark-glass {
+        background: rgba(15, 23, 42, 0.78);
+        border-right: 1px solid rgba(255, 255, 255, 0.09);
+        box-shadow: 4px 0 28px -8px rgba(0, 0, 0, 0.45);
+    }
+
+    .glass-collapse-btn {
+        position: absolute;
+        top: 20px;
+        right: -13px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        background: #FFFFFF;
+        color: #0F172A;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        z-index: 20;
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .dark-glass .glass-collapse-btn {
+        background: #1E293B;
+        color: #F8FAFC;
+        border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .glass-collapse-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .glass-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 6px 14px 6px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+    }
+
+    .dark-glass .glass-brand {
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-section-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--mud-palette-text-secondary);
+        padding: 10px 10px 4px 10px;
+        opacity: 0.75;
+    }
+
+    .glass-nav-item {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 10px;
+        margin: 3px 0;
+        border-radius: 14px;
+        text-decoration: none;
+        color: var(--mud-palette-text-primary);
+        border: 1px solid transparent;
+        transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+        cursor: pointer;
+    }
+
+    .glass-sidebar.collapsed .glass-nav-item {
+        justify-content: center;
+        padding: 6px;
+    }
+
+    .glass-nav-item:hover {
+        background: rgba(255, 255, 255, 0.65);
+        border-color: rgba(15, 23, 42, 0.06);
+        box-shadow: 0 4px 14px -4px rgba(10, 37, 64, 0.10);
+    }
+
+    .dark-glass .glass-nav-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.10);
+    }
+
+    .glass-nav-item.active {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.65));
+        border-color: rgba(0, 102, 204, 0.22);
+        box-shadow: 0 6px 18px -6px rgba(0, 102, 204, 0.22);
+        font-weight: 600;
+    }
+
+    .dark-glass .glass-nav-item.active {
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.20), rgba(56, 189, 248, 0.08));
+        border-color: rgba(56, 189, 248, 0.35);
+    }
+
+    .glass-icon-tile {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #FFFFFF;
+        box-shadow: 0 6px 14px -4px rgba(0, 0, 0, 0.28), inset 0 1px 1px rgba(255, 255, 255, 0.45);
+        transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Dock-style hover magnification in collapsed rail mode */
+    .glass-sidebar.collapsed .glass-nav-item:hover .glass-icon-tile {
+        transform: scale(1.22);
+    }
+
+    .glass-nav-label {
+        font-size: 0.88rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+    }
+
+    .glass-badge {
+        font-size: 0.70rem;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: rgba(0, 102, 204, 0.12);
+        color: #0066CC;
+    }
+
+    .dark-glass .glass-badge {
+        background: rgba(56, 189, 248, 0.18);
+        color: #38BDF8;
+    }
+
+    /* Floating glass pill tooltip in collapsed mode */
+    .glass-tooltip {
+        display: none;
+        position: absolute;
+        left: 66px;
+        top: 50%;
+        transform: translateY(-50%) translateX(-6px);
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(12px);
+        color: #0F172A;
+        padding: 6px 12px;
+        border-radius: 10px;
+        font-size: 0.80rem;
+        font-weight: 600;
+        white-space: nowrap;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+        pointer-events: none;
+        z-index: 999;
+    }
+
+    .dark-glass .glass-tooltip {
+        background: rgba(30, 41, 59, 0.95);
+        color: #F8FAFC;
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .glass-sidebar.collapsed .glass-nav-item:hover .glass-tooltip {
+        display: block;
+    }
+
+    .glass-footer {
+        margin-top: auto;
+        padding-top: 10px;
+        border-top: 1px solid rgba(15, 23, 42, 0.07);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .dark-glass .glass-footer {
+        border-top-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .glass-user-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.04);
+    }
+
+    .dark-glass .glass-user-card {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .glass-sidebar.collapsed .glass-user-card {
+        justify-content: center;
+        padding: 6px;
+        background: transparent;
+    }
+
+    .user-avatar-wrap {
+        position: relative;
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+    }
+
+    .online-dot {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #10B981;
+        border: 2px solid #FFFFFF;
+    }
+
+    .dark-glass .online-dot {
+        border-color: #0F172A;
+    }
+</style>
+
+<div class="glass-sidebar @(IsCollapsed ? "collapsed" : "") @(IsDarkMode ? "dark-glass" : "")">
+    <!-- Floating Expand / Collapse Button -->
+    <button type="button" class="glass-collapse-btn" @onclick="OnToggleCollapse" title="@(IsCollapsed ? "Expand sidebar" : "Collapse sidebar")">
+        <MudIcon Icon="@(IsCollapsed ? Icons.Material.Rounded.ChevronRight : Icons.Material.Rounded.ChevronLeft)" Size="Size.Small" />
+    </button>
+
+    <!-- Brand Header -->
+    <div class="glass-brand @(IsCollapsed ? "justify-center" : "")">
+        <div class="glass-icon-tile" style="background: linear-gradient(135deg, #0A2540, #0066CC);">
+            <MudIcon Icon="@Icons.Material.Rounded.Hub" Size="Size.Small" />
+        </div>
+        @if (!IsCollapsed)
+        {
+            <div style="min-width: 0; flex: 1;">
+                <div class="d-flex align-center justify-space-between">
+                    <MudText Typo="Typo.subtitle2" Class="font-weight-bold text-truncate">HT_Web</MudText>
+                    @if (!string.IsNullOrWhiteSpace(AppState.CurrentUser?.SelectedSite))
+                    {
+                        <span class="glass-badge">@AppState.CurrentUser.SelectedSite</span>
+                    }
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block text-truncate" Style="font-size: 0.70rem;">
+                    Central Electrical Test Team
+                </MudText>
+            </div>
+        }
+    </div>
+
+    <!-- Operations Section -->
+    @if (!IsCollapsed)
+    {
+        <div class="glass-section-label">Operations</div>
+    }
+
+    <a href="/" class="glass-nav-item @(IsActive("/", true) ? "active" : "")">
+        <div class="glass-icon-tile" style="background: linear-gradient(135deg, #3B82F6, #1D4ED8);">
+            <MudIcon Icon="@Icons.Material.Rounded.QrCodeScanner" Size="Size.Small" />
+        </div>
+        @if (!IsCollapsed)
+        {
+            <span class="glass-nav-label">Scan & Traceability</span>
+        }
+        <span class="glass-tooltip">Scan & Traceability</span>
+    </a>
+
+    <a href="/dashboard" class="glass-nav-item @(IsActive("/dashboard") ? "active" : "")">
+        <div class="glass-icon-tile" style="background: linear-gradient(135deg, #FB923C, #EA580C);">
+            <MudIcon Icon="@Icons.Material.Rounded.Dashboard" Size="Size.Small" />
+        </div>
+        @if (!IsCollapsed)
+        {
+            <span class="glass-nav-label">Dashboard</span>
+        }
+        <span class="glass-tooltip">Dashboard</span>
+    </a>
+
+    <!-- Analytics & Tools Section -->
+    @if (!IsCollapsed)
+    {
+        <div class="glass-section-label">Analytics & Tools</div>
+    }
+
+    <a href="/reports" class="glass-nav-item @(IsActive("/reports") ? "active" : "")">
+        <div class="glass-icon-tile" style="background: linear-gradient(135deg, #34D399, #059669);">
+            <MudIcon Icon="@Icons.Material.Rounded.Insights" Size="Size.Small" />
+        </div>
+        @if (!IsCollapsed)
+        {
+            <span class="glass-nav-label">Analytics & Reports</span>
+        }
+        <span class="glass-tooltip">Analytics & Reports</span>
+    </a>
+
+    <a href="/admin" class="glass-nav-item @(IsActive("/admin") ? "active" : "")">
+        <div class="glass-icon-tile" style="background: linear-gradient(135deg, #A855F7, #6D28D9);">
+            <MudIcon Icon="@Icons.Material.Rounded.AdminPanelSettings" Size="Size.Small" />
+        </div>
+        @if (!IsCollapsed)
+        {
+            <span class="glass-nav-label">Administration</span>
+        }
+        <span class="glass-tooltip">Administration</span>
+    </a>
+
+    <!-- Footer: Dark Mode Switch + User Card -->
+    <div class="glass-footer">
+        <div class="glass-nav-item" @onclick="OnToggleDarkMode" title="Toggle Dark Mode">
+            <div class="glass-icon-tile" style="background: linear-gradient(135deg, #38BDF8, #0284C7);">
+                <MudIcon Icon="@(IsDarkMode ? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)" Size="Size.Small" />
+            </div>
+            @if (!IsCollapsed)
+            {
+                <span class="glass-nav-label">Night Mode</span>
+                <MudSwitch T="bool" Value="@IsDarkMode" ValueChanged="@(_ => OnToggleDarkMode.InvokeAsync())" Color="Color.Info" Size="Size.Small" Class="ma-0 pa-0" />
+            }
+            <span class="glass-tooltip">@(IsDarkMode ? "Light Mode" : "Night Mode")</span>
+        </div>
+
+        @if (AppState.CurrentUser != null)
+        {
+            <div class="glass-user-card" title="@AppState.CurrentUser.DisplayName">
+                <div class="user-avatar-wrap">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small" Style="width: 34px; height: 34px; font-weight: 700;">
+                        @(AppState.CurrentUser.DisplayName?.FirstOrDefault().ToString().ToUpper() ?? "U")
+                    </MudAvatar>
+                    <span class="online-dot"></span>
+                </div>
+                @if (!IsCollapsed)
+                {
+                    <div style="min-width: 0; flex: 1;">
+                        <MudText Typo="Typo.caption" Class="font-weight-bold d-block text-truncate">
+                            @AppState.CurrentUser.DisplayName
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block text-truncate" Style="font-size: 0.70rem;">
+                            @(AppState.CurrentUser.AccessibleSites?.Count ?? 0) Authorized Site(s)
+                        </MudText>
+                    </div>
+                }
+            </div>
+        }
+    </div>
 </div>
 
-<MudDivider Class="mb-2" />
+@code {
+    [Parameter] public bool IsCollapsed { get; set; }
+    [Parameter] public bool IsDarkMode { get; set; }
+    [Parameter] public EventCallback OnToggleCollapse { get; set; }
+    [Parameter] public EventCallback OnToggleDarkMode { get; set; }
 
-<MudNavMenu Rounded="true" Margin="Margin.Dense" Color="Color.Primary" Class="pa-2">
-    <MudText Typo="Typo.overline" Class="px-3 text-muted">Operations</MudText>
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+        AppState.OnChange += HandleStateChanged;
+    }
 
-    <MudNavLink Href="/"
-                Match="NavLinkMatch.All"
-                Icon="@Icons.Material.Rounded.QrCodeScanner">
-        Scan & Traceability
-    </MudNavLink>
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
 
-    <MudNavLink Href="/dashboard"
-                Match="NavLinkMatch.Prefix"
-                Icon="@Icons.Material.Rounded.Dashboard">
-        Dashboard
-    </MudNavLink>
+    private void HandleStateChanged()
+        => InvokeAsync(StateHasChanged);
 
-    <MudText Typo="Typo.overline" Class="px-3 mt-4 text-muted">Analytics & Tools</MudText>
+    private bool IsActive(string href, bool exact = false)
+    {
+        var relative = "/" + NavigationManager.ToBaseRelativePath(NavigationManager.Uri).TrimStart('/');
+        if (exact)
+            return string.Equals(relative, href, StringComparison.OrdinalIgnoreCase);
 
-    <MudNavLink Href="/reports"
-                Match="NavLinkMatch.Prefix"
-                Icon="@Icons.Material.Rounded.Assessment">
-        Reports
-    </MudNavLink>
+        return relative.StartsWith(href, StringComparison.OrdinalIgnoreCase);
+    }
 
-    <MudNavLink Href="/admin"
-                Match="NavLinkMatch.Prefix"
-                Icon="@Icons.Material.Rounded.AdminPanelSettings">
-        Administration
-    </MudNavLink>
-</MudNavMenu>
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+        AppState.OnChange -= HandleStateChanged;
+    }
+}

@@ -10,15 +10,13 @@
 @inject ApplicationState AppState
 @inject ISnackbar Snackbar
 
-<PageTitle>Traceability Analytics - HT_Web</PageTitle>
+<PageTitle>Statistics - SEWS-E Harness Traceability System</PageTitle>
 
 <style>
     .hero-banner {
         background: linear-gradient(135deg, #0A2540 0%, #0F3460 55%, #0066CC 100%);
         border-radius: 16px;
         color: #FFFFFF;
-        position: relative;
-        overflow: hidden;
     }
     .bento-card {
         border-radius: 16px;
@@ -28,7 +26,7 @@
     }
     .bento-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 12px 28px -12px rgba(10, 37, 64, 0.18);
+        box-shadow: 0 12px 28px -12px rgba(10, 37, 64, 0.16);
     }
     .kpi-icon-box {
         width: 44px;
@@ -37,6 +35,14 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+    .chart-toggle-group {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--mud-palette-divider);
     }
     .compact-grid .mud-table-cell {
         padding: 7px 10px !important;
@@ -50,25 +56,24 @@
 </style>
 
 <MudStack Spacing="4">
-    <!-- 1. HERO HEADER & QUICK FILTER BAR -->
+    <!-- 1. HERO HEADER & QUICK RANGE -->
     <MudPaper Elevation="2" Class="pa-5 hero-banner">
         <div class="d-flex flex-wrap justify-space-between align-center gap-3">
             <div>
                 <div class="d-flex align-center gap-2 mb-1">
                     <MudIcon Icon="@Icons.Material.Rounded.Insights" Style="color: #38BDF8;" />
                     <MudText Typo="Typo.overline" Style="color: #38BDF8; letter-spacing: 0.08em;">
-                        SOLUTION EVALUATION & ADOPTION
+                        TRACEABILITY USAGE & ACTIVITY
                     </MudText>
                 </div>
                 <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: #FFFFFF;">
-                    Harness Traceability Analytics
+                    Harness Traceability Statistics
                 </MudText>
                 <MudText Typo="Typo.body2" Style="color: #CBD5E1;">
-                    Anonymous activity across sites, daily search volume, and active operator adoption
+                    Search volume by day, active users count, and plant activity overview
                 </MudText>
             </div>
 
-            <!-- Quick Range Chips -->
             <div class="d-flex flex-wrap align-center gap-2">
                 <MudButton Size="Size.Small" Variant="@(_activePreset == "1D" ? Variant.Filled : Variant.Outlined)"
                            Color="Color.Info" OnClick="@(() => ApplyPresetAsync("1D", 0))">Today</MudButton>
@@ -116,7 +121,7 @@
                            StartIcon="@Icons.Material.Rounded.Refresh"
                            OnClick="LoadStatisticsAsync"
                            Disabled="@(_isLoading || AvailableSites.Count == 0)">
-                    @(_isLoading ? "Refreshing..." : "Refresh Analytics")
+                    @(_isLoading ? "Refreshing..." : "Refresh Statistics")
                 </MudButton>
             </MudItem>
         </MudGrid>
@@ -135,9 +140,8 @@
     }
     else
     {
-        <!-- 2. 4 MODERN BENTO KPI CARDS -->
+        <!-- 2. 4 KPI CARDS -->
         <MudGrid Spacing="3">
-            <!-- Total Searches -->
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Elevation="0" Class="pa-4 bento-card">
                     <div class="d-flex justify-space-between align-start">
@@ -156,7 +160,6 @@
                 </MudPaper>
             </MudItem>
 
-            <!-- Active Users (Anonymous Count) -->
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Elevation="0" Class="pa-4 bento-card">
                     <div class="d-flex justify-space-between align-start">
@@ -170,12 +173,11 @@
                     </div>
                     <MudDivider Class="my-2" />
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Intensity: <strong>@AvgSearchesPerUser.ToString("0.0")</strong> searches/user
+                        Avg: <strong>@AvgSearchesPerUser.ToString("0.0")</strong> searches/user
                     </MudText>
                 </MudPaper>
             </MudItem>
 
-            <!-- Sites Searched -->
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Elevation="0" Class="pa-4 bento-card">
                     <div class="d-flex justify-space-between align-start">
@@ -196,7 +198,6 @@
                 </MudPaper>
             </MudItem>
 
-            <!-- Peak Day -->
             <MudItem xs="12" sm="6" md="3">
                 <MudPaper Elevation="0" Class="pa-4 bento-card">
                     <div class="d-flex justify-space-between align-start">
@@ -218,27 +219,34 @@
             </MudItem>
         </MudGrid>
 
-        <!-- 3. DAILY VOLUME & SITE SHARE CHARTS -->
+        <!-- 3. INTERACTIVE DAILY & SITE CHARTS (WITH CHART-TYPE SWITCHER) -->
         <MudGrid Spacing="3">
+            <!-- Total Searches by Day -->
             <MudItem xs="12" md="8">
                 <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
-                    <div class="d-flex justify-space-between align-center mb-3">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
                         <div>
                             <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Total Searches by Day</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Daily traceability demand across selected sites</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Daily searches and active users across selected period</MudText>
                         </div>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
-                            @_stats.DailyStats.Count Active Day(s)
-                        </MudChip>
+                        <div class="chart-toggle-group">
+                            <MudButton Size="Size.Small" Variant="@(_dailyChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _dailyChartType = ChartType.Bar)">Bar</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_dailyChartType == ChartType.Line ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _dailyChartType = ChartType.Line)">Line</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_dailyChartType == ChartType.StackedBar ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _dailyChartType = ChartType.StackedBar)">Stacked</MudButton>
+                        </div>
                     </div>
+
                     @if (_dailySeries.Count > 0 && _dailyLabels.Length > 0)
                     {
                         <MudChart T="double"
-                                  ChartType="ChartType.Bar"
+                                  ChartType="@_dailyChartType"
                                   ChartSeries="@_dailySeries"
                                   ChartLabels="@_dailyLabels"
                                   Width="100%"
-                                  Height="290px" />
+                                  Height="300px" />
                     }
                     else
                     {
@@ -247,19 +255,45 @@
                 </MudPaper>
             </MudItem>
 
+            <!-- Searches by Site -->
             <MudItem xs="12" md="4">
                 <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
-                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Searches by Site</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">Share of total queries per plant</MudText>
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Searches by Site</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Distribution by plant</MudText>
+                        </div>
+                        <div class="chart-toggle-group">
+                            <MudButton Size="Size.Small" Variant="@(_siteChartType == ChartType.Pie ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _siteChartType = ChartType.Pie)">Pie</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_siteChartType == ChartType.Donut ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _siteChartType = ChartType.Donut)">Donut</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_siteChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _siteChartType = ChartType.Bar)">Bar</MudButton>
+                        </div>
+                    </div>
+
                     <div class="d-flex justify-center my-2">
                         @if (_siteValues.Length > 0)
                         {
-                            <MudChart T="double"
-                                      ChartType="ChartType.Donut"
-                                      ChartSeries="@_siteValues.AsChartDataSet()"
-                                      ChartLabels="@_siteLabels"
-                                      Width="230px"
-                                      Height="230px" />
+                            @if (_siteChartType == ChartType.Bar)
+                            {
+                                <MudChart T="double"
+                                          ChartType="ChartType.Bar"
+                                          ChartSeries="@_siteBarSeries"
+                                          ChartLabels="@_siteLabels"
+                                          Width="100%"
+                                          Height="260px" />
+                            }
+                            else
+                            {
+                                <MudChart T="double"
+                                          ChartType="@_siteChartType"
+                                          ChartSeries="@_siteValues.AsChartDataSet()"
+                                          ChartLabels="@_siteLabels"
+                                          Width="240px"
+                                          Height="240px" />
+                            }
                         }
                         else
                         {
@@ -270,23 +304,31 @@
             </MudItem>
         </MudGrid>
 
-        <!-- 4. SHIFT / HOURLY ADOPTION & SITE BREAKDOWN TABLE -->
+        <!-- 4. HOURLY ACTIVITY & SITE BREAKDOWN TABLE -->
         <MudGrid Spacing="3">
-            <!-- Hourly Shift Usage -->
             <MudItem xs="12" md="5">
                 <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
-                    <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Activity by Hour of Day</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
-                        Helps evaluate shift adoption (Morning / Afternoon / Night)
-                    </MudText>
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Activity by Hour of Day</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Shift usage pattern (00h – 23h)</MudText>
+                        </div>
+                        <div class="chart-toggle-group">
+                            <MudButton Size="Size.Small" Variant="@(_hourlyChartType == ChartType.Line ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _hourlyChartType = ChartType.Line)">Line</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_hourlyChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _hourlyChartType = ChartType.Bar)">Bar</MudButton>
+                        </div>
+                    </div>
+
                     @if (_hourlySeries.Count > 0 && _hourlyLabels.Length > 0)
                     {
                         <MudChart T="double"
-                                  ChartType="ChartType.Line"
+                                  ChartType="@_hourlyChartType"
                                   ChartSeries="@_hourlySeries"
                                   ChartLabels="@_hourlyLabels"
                                   Width="100%"
-                                  Height="240px" />
+                                  Height="250px" />
                     }
                     else
                     {
@@ -295,12 +337,11 @@
                 </MudPaper>
             </MudItem>
 
-            <!-- Site Breakdown Table -->
             <MudItem xs="12" md="7">
                 <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
                     <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Site Activity Breakdown</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
-                        Anonymous adoption metrics per searched site
+                        Aggregated search counts and active users per site
                     </MudText>
                     <MudDataGrid T="SiteTrackingStat"
                                  Items="@_stats.SiteStats"
@@ -343,6 +384,10 @@
     private bool _isLoading = false;
     private string? _errorMessage;
 
+    private ChartType _dailyChartType = ChartType.Bar;
+    private ChartType _siteChartType = ChartType.Donut;
+    private ChartType _hourlyChartType = ChartType.Line;
+
     private TrackingStatisticsResult _stats = new();
     private List<ChartSeries<double>> _dailySeries = new();
     private string[] _dailyLabels = Array.Empty<string>();
@@ -350,6 +395,7 @@
     private string[] _hourlyLabels = Array.Empty<string>();
     private double[] _siteValues = Array.Empty<double>();
     private string[] _siteLabels = Array.Empty<string>();
+    private List<ChartSeries<double>> _siteBarSeries = new();
 
     private List<string> AvailableSites => AppState.CurrentUser?.AccessibleSites ?? new List<string>();
 
@@ -429,6 +475,9 @@
 
             _siteLabels = _stats.SiteStats.Select(s => s.Site).ToArray();
             _siteValues = _stats.SiteStats.Select(s => (double)s.TotalCount).ToArray();
+            _siteBarSeries = _siteValues.Length > 0
+                ? new List<ChartSeries<double>> { new() { Name = "Searches", Data = _siteValues } }
+                : new();
 
             var fullHours = Enumerable.Range(0, 24).Select(h => new
             {

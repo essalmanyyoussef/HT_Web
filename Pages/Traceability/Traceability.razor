@@ -1,4 +1,4 @@
-Razor CSHTML 
+ 
 @page "/"
 @implements IDisposable
 
@@ -15,7 +15,7 @@ Razor CSHTML
 @inject VisionReportService VisionReportService
 @inject IJSRuntime JS
 
-<PageTitle>Harness Traceability</PageTitle>
+<PageTitle>SEWS-E Harness Traceability System</PageTitle>
 
 <style>
     .compact-grid .mud-table-cell {
@@ -201,7 +201,7 @@ Razor CSHTML
             <CardHeaderContent>
                 <MudText Typo="Typo.h6" Class="font-weight-bold">Harness Scan & Search</MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    Operator: @(AppState.CurrentUser?.DisplayName ?? "User")
+                    User: @(AppState.CurrentUser?.DisplayName ?? "User")
                 </MudText>
             </CardHeaderContent>
         </MudCardHeader>

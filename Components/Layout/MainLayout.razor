@@ -13,7 +13,7 @@
 <MudDialogProvider CloseButton="true" CloseOnEscapeKey="true" MaxWidth="MaxWidth.Medium" />
 <MudSnackbarProvider AnchorOrigin="SnackbarOrigin.BottomRight" />
 
-<!-- Initial Access & Site Verification Overlay (prevents freeze on first load) -->
+<!-- Initial Access & Site Verification Overlay -->
 <MudOverlay Visible="@AppState.IsCheckingAccess" DarkBackground="true" Absolute="false" ZIndex="9999"
             Style="backdrop-filter: blur(8px);">
     <MudPaper Elevation="0" Class="pa-7 rounded-xl"
@@ -50,16 +50,15 @@
         <MudIcon Icon="@Icons.Material.Rounded.Hub" Size="Size.Large" Class="mr-2" />
         <div>
             <MudText Typo="Typo.h6" Class="font-weight-bold" Style="line-height: 1.1;">
-                Harness Traceability
+                SEWS-E Harness Traceability System
             </MudText>
             <MudText Typo="Typo.caption" Style="opacity: 0.75;">
-                SEWS MES Traceability System
+                Developed by Central Electrical Test Team
             </MudText>
         </div>
 
         <MudSpacer />
 
-        <!-- Active Site Indicator -->
         @if (AppState.CurrentUser != null && !string.IsNullOrWhiteSpace(AppState.CurrentUser.SelectedSite))
         {
             <MudChip T="string"
@@ -72,14 +71,12 @@
             </MudChip>
         }
 
-        <!-- Dark Mode Toggle -->
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
                        Color="Color.Inherit"
                        OnClick="ToggleTheme"
                        Title="Toggle light/dark theme"
                        Class="mr-2" />
 
-        <!-- User Profile Menu -->
         @if (AppState.CurrentUser != null)
         {
             <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
@@ -108,10 +105,14 @@
 
     <MudDrawer @bind-Open="_drawerOpen"
                ClipMode="DrawerClipMode.Always"
-               Elevation="1"
+               Elevation="0"
                Variant="DrawerVariant.Responsive"
-               Width="260px">
-        <NavMenu />
+               Width="@(_isCollapsed ? "76px" : "260px")"
+               Style="overflow: visible; background: transparent;">
+        <NavMenu IsCollapsed="@_isCollapsed"
+                 IsDarkMode="@_isDarkMode"
+                 OnToggleCollapse="ToggleCollapse"
+                 OnToggleDarkMode="ToggleTheme" />
     </MudDrawer>
 
     <MudMainContent Class="pt-16 px-4 pb-8" Style="background-color: var(--mud-palette-background); min-height: 100vh;">
@@ -123,6 +124,7 @@
 
 @code {
     private bool _drawerOpen = true;
+    private bool _isCollapsed = false;
     private bool _isDarkMode = false;
 
     protected override void OnInitialized()
@@ -149,6 +151,7 @@
 
     private void HandleStateChanged() => InvokeAsync(StateHasChanged);
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleCollapse() => _isCollapsed = !_isCollapsed;
     private void ToggleTheme() => _isDarkMode = !_isDarkMode;
 
     public void Dispose()
