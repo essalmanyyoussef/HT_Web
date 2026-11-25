@@ -213,13 +213,12 @@
                     <MudSelect T="string"
                                @bind-Value="SelectedSite"
                                Label="Site"
+                               Placeholder="Select Site..."
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense="true"
-                               AnchorOrigin="Origin.BottomCenter"
                                Adornment="Adornment.Start"
                                AdornmentIcon="@Icons.Material.Rounded.LocationOn"
-                               AdornmentColor="Color.Primary"
                                Disabled="@(AvailableSites.Count == 0)">
                         @foreach (var site in AvailableSites)
                         {

@@ -322,6 +322,17 @@
         <span class="glass-tooltip">Production Statistics</span>
     </a>
 
+        <a href="/station-history" class="glass-nav-item @(IsActive("/station-history") ? "active" : "")">
+        <div class="glass-icon-tile" style="background: linear-gradient(135deg, #6366F1, #4338CA);">
+            <MudIcon Icon="@Icons.Material.Rounded.DeveloperBoard" Size="Size.Small" />
+        </div>
+        @if (!IsCollapsed)
+        {
+            <span class="glass-nav-label">Station History</span>
+        }
+        <span class="glass-tooltip">Station History</span>
+    </a>
+
     <a href="/reports" class="glass-nav-item @(IsActive("/reports") ? "active" : "")">
         <div class="glass-icon-tile" style="background: linear-gradient(135deg, #34D399, #059669);">
             <MudIcon Icon="@Icons.Material.Rounded.Insights" Size="Size.Small" />

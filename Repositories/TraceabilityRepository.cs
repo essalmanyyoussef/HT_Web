@@ -506,4 +506,164 @@ WHERE rn = 1;";
             row.Line = "L1";
         }
     }
+    public async Task<List<TraceabilityRecord>> GetStationHistoryAsync(
+        string site,
+        string hostname,
+        DateTime startDate,
+        DateTime endDate)
+    {
+        const string sql = @"
+SELECT
+    Ref             AS Reference,
+    BC              AS TravelTicketLabel,
+    Test            AS Station,
+    IN_Barcode_1    AS SecondLabel,
+    IN_Barcode_2    AS ThirdTravelTicketLabel,
+    IN_Barcode_3    AS FourthTravelTicketLabel,
+    OUT_Barcode     AS FinalLabel,
+    DateEnd         AS TestDate,
+    Rework          AS Reworked,
+    Rework_ID       AS ReworkId,
+    Hostname
+FROM correlations_trial WITH (NOLOCK)
+WHERE Hostname LIKE @Hostname
+  AND [DateEnd] >= @StartDate
+  AND [DateEnd] < @EndDate
+ORDER BY DateEnd DESC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<TraceabilityRecord>(
+            new CommandDefinition(
+                sql,
+                new { Hostname = hostname.Trim(), StartDate = startDate, EndDate = endDate },
+                commandTimeout: 180));
+
+        return result.ToList();
+    }
+
+    public async Task<List<HostnameLookupItem>> FindHostnamesByBarcodeAsync(
+        string site,
+        string searchMode,
+        string searchValue)
+    {
+        var column = searchMode switch
+        {
+            "SN" => "OUT_Barcode",
+            "REF" => "Ref",
+            _ => "BC"
+        };
+
+        var sql = $@"
+SELECT DISTINCT
+    Hostname,
+    Test AS Station
+FROM correlations_trial WITH (NOLOCK)
+WHERE {column} = @SearchValue
+  AND Hostname IS NOT NULL
+ORDER BY Hostname ASC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<HostnameLookupItem>(
+            new CommandDefinition(
+                sql,
+                new { SearchValue = searchValue.Trim() },
+                commandTimeout: 120));
+
+        return result.ToList();
+    }
+
+    public async Task<List<HostnameLookupItem>> FindHostnamesBySiteBanksAsync(string site)
+    {
+        const string sql = @"
+SELECT DISTINCT
+    Hostname,
+    Bank
+FROM dbo.AggregatedCorrelations WITH (NOLOCK)
+WHERE [Date] >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+  AND [Bank] IS NOT NULL
+  AND [Bank] LIKE '%[_]%'
+ORDER BY Hostname ASC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var rows = (await connection.QueryAsync<HostnameLookupItem>(
+            new CommandDefinition(sql, commandTimeout: 120))).ToList();
+
+        foreach (var row in rows)
+        {
+            ParseBankWithStationType(row);
+        }
+
+        return rows;
+    }
+
+    private static void ParseBankWithStationType(HostnameLookupItem row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Bank))
+            return;
+
+        var parts = row.Bank.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            row.Customer = row.Bank;
+            row.Project = "Other";
+            row.Family = row.Bank;
+            row.Line = "L1";
+            row.Station = "Other (OT)";
+            return;
+        }
+
+        var rawStation = parts[^1].Trim().ToUpperInvariant();
+        row.Station = rawStation switch
+        {
+            "ET" => "Electrical Test (ET)",
+            "CT" => "Clip Test (CT)",
+            "TM" => "Torque Machine (TM)",
+            "VT" => "Vision Test (VT)",
+            "OT" => "Other (OT)",
+            _ => parts[^1].Trim()
+        };
+
+        var core = parts[..^1];
+        var customerCode = core[0].ToUpperInvariant();
+        row.Customer = customerCode switch
+        {
+            "PSA" or "STL" => "STELLANTIS",
+            "TYT" or "TOY" => "TOYOTA",
+            "SUZ" => "SUZUKI",
+            "RNLT" or "RENA" or "RSA" or "RNL" or "RNT" => "RENAULT",
+            "NIS" or "NISS" or "NSN" => "NISSAN",
+            _ => customerCode
+        };
+
+        if (core.Length >= 4 && core[^1].StartsWith("L", StringComparison.OrdinalIgnoreCase))
+        {
+            row.Project = core[1];
+            row.Family = string.Join("_", core[2..^1]);
+            row.Line = core[^1].ToUpperInvariant();
+        }
+        else if (core.Length == 3)
+        {
+            row.Project = core[1];
+            row.Family = core[2];
+            row.Line = "L1";
+        }
+        else if (core.Length == 2)
+        {
+            row.Project = core[1];
+            row.Family = "Standard";
+            row.Line = "L1";
+        }
+        else
+        {
+            row.Project = core.Length > 1 ? core[1] : "Other";
+            row.Family = string.Join("_", core.Skip(2));
+            row.Line = "L1";
+        }
+    }
 }
