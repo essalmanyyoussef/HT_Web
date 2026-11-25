@@ -12,5 +12,8 @@
     <EmbeddedResource Remove="ET_Training\**" />
     <None Remove="ET_Training\**" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MudBlazor" Version="9.14.0" />
+  </ItemGroup>
 
 </Project>
