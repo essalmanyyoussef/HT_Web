@@ -407,4 +407,103 @@ ORDER BY [Hour] ASC;";
 
         return result;
     }
+    public async Task<List<ProductionRawRecord>> GetProductionDataAsync(
+        string site,
+        DateTime startDate,
+        DateTime endDate)
+    {
+        const string sql = @"
+WITH LatestRows AS (
+    SELECT
+        [Date],
+        [Hour],
+        [Hostname],
+        [Bank],
+        [Ref],
+        [TotalQty],
+        ROW_NUMBER() OVER (
+            PARTITION BY [Date], [Hour], [Hostname], [Bank], [Ref]
+            ORDER BY [RunTimestamp] DESC
+        ) AS rn
+    FROM dbo.AggregatedCorrelations WITH (NOLOCK)
+    WHERE [Date] BETWEEN @StartDate AND @EndDate
+      AND [Bank] LIKE '%[_]ET'
+      AND [AggregationName] = 'CorrelationsAggregation'
+)
+SELECT [Date], [Hour], [Hostname], [Bank], [Ref], [TotalQty]
+FROM LatestRows
+WHERE rn = 1;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var rows = (await connection.QueryAsync<ProductionRawRecord>(
+            new CommandDefinition(
+                sql,
+                new { StartDate = startDate.Date, EndDate = endDate.Date },
+                commandTimeout: 120))).ToList();
+
+        foreach (var row in rows)
+        {
+            ParseBankHierarchy(row);
+        }
+
+        return rows;
+    }
+
+    private static void ParseBankHierarchy(ProductionRawRecord row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Bank))
+            return;
+
+        var parts = row.Bank.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            row.Customer = row.Bank;
+            row.Project = "Other";
+            row.Family = row.Bank;
+            row.Line = "L1";
+            return;
+        }
+
+        var core = parts[^1].Equals("ET", StringComparison.OrdinalIgnoreCase)
+            ? parts[..^1]
+            : parts;
+
+        var customerCode = core[0].ToUpperInvariant();
+        row.Customer = customerCode switch
+        {
+            "PSA" or "STL" => "STELLANTIS",
+            "TYT" or "TOY" => "TOYOTA",
+            "SUZ" => "SUZUKI",
+            "RNLT" or "RENA" or "RSA" or "RNL" or "RNT" => "RENAULT",
+            "NIS" or "NISS" or "NSN" => "NISSAN",
+            _ => customerCode
+        };
+
+        if (core.Length >= 4 && core[^1].StartsWith("L", StringComparison.OrdinalIgnoreCase))
+        {
+            row.Project = core[1];
+            row.Family = string.Join("_", core[2..^1]);
+            row.Line = core[^1].ToUpperInvariant();
+        }
+        else if (core.Length == 3)
+        {
+            row.Project = core[1];
+            row.Family = core[2];
+            row.Line = "L1";
+        }
+        else if (core.Length == 2)
+        {
+            row.Project = core[1];
+            row.Family = "Standard";
+            row.Line = "L1";
+        }
+        else
+        {
+            row.Project = core.Length > 1 ? core[1] : "Other";
+            row.Family = string.Join("_", core.Skip(2));
+            row.Line = "L1";
+        }
+    }
 }

@@ -1,0 +1,1091 @@
+@page "/production"
+@implements IDisposable
+
+@using System.Text
+@using MudBlazor
+@using Microsoft.JSInterop
+@using HT_Web.Models.Traceability
+@using HT_Web.Repositories
+@using HT_Web.Services.State
+
+@inject ITraceabilityRepository TraceabilityRepository
+@inject ApplicationState AppState
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Production Statistics - SEWS-E Harness Traceability System</PageTitle>
+
+<style>
+    .prod-hero {
+        background: linear-gradient(135deg, #0A2540 0%, #0F3460 55%, #0066CC 100%);
+        border-radius: 16px;
+        color: #FFFFFF;
+    }
+    .bento-card {
+        border-radius: 16px;
+        border: 1px solid var(--mud-palette-divider);
+        background: var(--mud-palette-surface);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .bento-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 28px -12px rgba(10, 37, 64, 0.16);
+    }
+    .kpi-icon-box {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .chart-toggle-group {
+        display: inline-flex;
+        gap: 3px;
+        padding: 3px;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--mud-palette-divider);
+    }
+    .data-pill-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--mud-palette-divider);
+    }
+    .data-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        background: rgba(15, 23, 42, 0.04);
+        border: 1px solid var(--mud-palette-divider);
+    }
+    .data-pill-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .compare-tile {
+        border-radius: 14px;
+        padding: 14px;
+        border: 1px solid var(--mud-palette-divider);
+        background: linear-gradient(135deg, rgba(0,102,204,0.04) 0%, var(--mud-palette-surface) 100%);
+    }
+    .pareto-row {
+        padding: 6px 0;
+        border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
+    }
+    .pareto-row:last-child {
+        border-bottom: none;
+    }
+    .compact-grid .mud-table-cell {
+        padding: 6px 8px !important;
+        font-size: 0.78rem !important;
+        white-space: nowrap;
+    }
+    .compact-grid .mud-table-head .mud-table-row {
+        background: linear-gradient(180deg, rgba(10, 37, 64, 0.06) 0%, rgba(10, 37, 64, 0.02) 100%);
+        border-bottom: 2px solid var(--mud-palette-primary);
+    }
+</style>
+
+<MudStack Spacing="4">
+    <!-- 1. HERO HEADER -->
+    <MudPaper Elevation="2" Class="pa-5 prod-hero">
+        <div class="d-flex flex-wrap justify-space-between align-center gap-3">
+            <div>
+                <div class="d-flex align-center gap-2 mb-1">
+                    <MudIcon Icon="@Icons.Material.Rounded.PrecisionManufacturing" Style="color: #38BDF8;" />
+                    <MudText Typo="Typo.overline" Style="color: #38BDF8; letter-spacing: 0.08em;">
+                        ET MACHINES PRODUCTION OUTPUT
+                    </MudText>
+                </div>
+                <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: #FFFFFF;">
+                    Site Production Statistics
+                </MudText>
+                <MudText Typo="Typo.body2" Style="color: #CBD5E1;">
+                    Reference quantities, shift & line comparisons, and Customer / Project / Family breakdown
+                </MudText>
+            </div>
+
+            <div class="d-flex flex-wrap align-center gap-2">
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "TODAY" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" Disabled="@string.IsNullOrWhiteSpace(_selectedSite)"
+                           OnClick="@(() => ApplyDatePresetAsync("TODAY", 0))">Today</MudButton>
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "7D" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" Disabled="@string.IsNullOrWhiteSpace(_selectedSite)"
+                           OnClick="@(() => ApplyDatePresetAsync("7D", 6))">1 Week</MudButton>
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "30D" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" Disabled="@string.IsNullOrWhiteSpace(_selectedSite)"
+                           OnClick="@(() => ApplyDatePresetAsync("30D", 29))">1 Month</MudButton>
+            </div>
+        </div>
+    </MudPaper>
+
+    <!-- 2. PRIMARY QUERY BAR -->
+    <MudPaper Elevation="0" Class="pa-4 bento-card">
+        <MudGrid Spacing="2" AlignItems="Center">
+            <MudItem xs="12" sm="4" md="2">
+                <MudSelect T="string" Value="_selectedSite" ValueChanged="OnSiteChangedAsync"
+                           Label="Site" Placeholder="Select Site..." Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Rounded.LocationOn">
+                    @foreach (var site in AvailableSites)
+                    {
+                        <MudSelectItem T="string" Value="@site">@site</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <MudDatePicker Label="Start Date" @bind-Date="_startDate" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <MudDatePicker Label="End Date" @bind-Date="_endDate" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Value="_selectedShift" ValueChanged="OnShiftChanged" Label="Shift Filter" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Rounded.Schedule">
+                    <MudSelectItem T="string" Value="@("ALL")">All Shifts (00h – 23h)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("S1")">@($"Shift 1 ({_s1Start:00}h – {_s1End:00}h)")</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("S2")">@($"Shift 2 ({_s2Start:00}h – {_s2End:00}h)")</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("S3")">@($"Shift 3 ({_s3Start:00}h – {_s3End:00}h)")</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                           StartIcon="@Icons.Material.Rounded.Refresh" OnClick="LoadProductionAsync"
+                           Disabled="@(_isLoading || string.IsNullOrWhiteSpace(_selectedSite))">
+                    @(_isLoading ? "Loading..." : "Refresh")
+                </MudButton>
+                <MudIconButton Icon="@Icons.Material.Rounded.Tune" Color="Color.Secondary" Variant="Variant.Outlined"
+                               Title="Configure Shift Hours for this Site" OnClick="@(() => _showShiftConfig = !_showShiftConfig)" />
+            </MudItem>
+        </MudGrid>
+
+        <!-- Customizable Shift Hours Panel -->
+        <MudCollapse Expanded="@_showShiftConfig">
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="font-weight-bold d-block mb-2">
+                Customize Shift Time Windows (Hours 0–23) @(string.IsNullOrWhiteSpace(_selectedSite) ? "" : $"for {_selectedSite}")
+            </MudText>
+            <MudGrid Spacing="2" AlignItems="Center">
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" Value="_s1Start" ValueChanged="@(v => { _s1Start = v; RecomputeDashboard(); })" Label="Shift 1 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" Value="_s1End" ValueChanged="@(v => { _s1End = v; RecomputeDashboard(); })" Label="Shift 1 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" Value="_s2Start" ValueChanged="@(v => { _s2Start = v; RecomputeDashboard(); })" Label="Shift 2 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" Value="_s2End" ValueChanged="@(v => { _s2End = v; RecomputeDashboard(); })" Label="Shift 2 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" Value="_s3Start" ValueChanged="@(v => { _s3Start = v; RecomputeDashboard(); })" Label="Shift 3 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" Value="_s3End" ValueChanged="@(v => { _s3End = v; RecomputeDashboard(); })" Label="Shift 3 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+            </MudGrid>
+        </MudCollapse>
+
+        <!-- 3. CASCADING BANK TREE FILTER -->
+        @if (_hasLoaded && _rawRows.Count > 0)
+        {
+            <MudDivider Class="my-3" />
+            <div class="d-flex align-center gap-1 mb-2">
+                <MudIcon Icon="@Icons.Material.Rounded.AccountTree" Size="Size.Small" Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Color="Color.Primary" Class="font-weight-bold">
+                    Bank Hierarchy Filter (Customer → Project → Family → Line)
+                </MudText>
+                <MudSpacer />
+                @if (_selectedCustomer != "ALL" || _selectedProject != "ALL" || _selectedFamily != "ALL" || _selectedLine != "ALL")
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary" OnClick="ResetHierarchyFilters">
+                        Reset Filters
+                    </MudButton>
+                }
+            </div>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Value="_selectedCustomer" ValueChanged="OnCustomerChanged" Label="Customer" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem T="string" Value="@("ALL")">All Customers (@AvailableCustomers.Count)</MudSelectItem>
+                        @foreach (var c in AvailableCustomers)
+                        {
+                            <MudSelectItem T="string" Value="@c">@c</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Value="_selectedProject" ValueChanged="OnProjectChanged" Label="Project" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem T="string" Value="@("ALL")">All Projects (@AvailableProjects.Count)</MudSelectItem>
+                        @foreach (var p in AvailableProjects)
+                        {
+                            <MudSelectItem T="string" Value="@p">@p</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Value="_selectedFamily" ValueChanged="OnFamilyChanged" Label="Family" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem T="string" Value="@("ALL")">All Families (@AvailableFamilies.Count)</MudSelectItem>
+                        @foreach (var f in AvailableFamilies)
+                        {
+                            <MudSelectItem T="string" Value="@f">@f</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" Value="_selectedLine" ValueChanged="OnLineChanged" Label="Line" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem T="string" Value="@("ALL")">All Lines (@AvailableLines.Count)</MudSelectItem>
+                        @foreach (var l in AvailableLines)
+                        {
+                            <MudSelectItem T="string" Value="@l">@l</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        }
+    </MudPaper>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="rounded-xl">@_errorMessage</MudAlert>
+    }
+
+    @if (_isLoading)
+    {
+        <MudPaper Elevation="0" Class="pa-8 bento-card text-center">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" Class="mb-3" />
+            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Loading ET Production Data for @_selectedSite...</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Querying AggregatedCorrelations and building Bank hierarchy</MudText>
+        </MudPaper>
+    }
+    else if (string.IsNullOrWhiteSpace(_selectedSite))
+    {
+        <!-- EMPTY PROMPT UNTIL USER SELECTS A SITE -->
+        <MudPaper Elevation="0" Class="pa-10 d-flex flex-column align-center justify-center rounded-xl border-2 border-dashed">
+            <MudAvatar Size="Size.Large" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Rounded.Factory" Size="Size.Large" />
+            </MudAvatar>
+            <MudText Typo="Typo.h6" Class="font-weight-bold">Select a Site to View Production Statistics</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mt-1 mb-4" Style="max-width: 480px;">
+                Choose one of your authorized sites below (or from the Site dropdown above) to load ET machine production output.
+            </MudText>
+            <div class="d-flex flex-wrap justify-center gap-2">
+                @foreach (var site in AvailableSites)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Rounded.LocationOn"
+                               OnClick="@(() => OnSiteChangedAsync(site))">
+                        @site
+                    </MudButton>
+                }
+            </div>
+        </MudPaper>
+    }
+    else if (_hasLoaded)
+    {
+        <!-- 4. KPI CARDS -->
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Total Produced Qty</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1">@_totalQty.ToString("N0")</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(0, 102, 204, 0.12); color: #0066CC;">
+                            <MudIcon Icon="@Icons.Material.Rounded.Inventory2" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Avg: <strong>@_avgQtyPerActiveHour.ToString("N1")</strong> pcs / active hour
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">References Produced</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1" Color="Color.Success">@_referenceSummaries.Count</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(16, 185, 129, 0.14); color: #10B981;">
+                            <MudIcon Icon="@Icons.Material.Rounded.QrCode2" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-truncate d-block">
+                        Top Ref: <strong>@(_referenceSummaries.FirstOrDefault() is { } topRef ? $"{topRef.Ref} ({topRef.SharePercent:0.0}%)" : "-")</strong>
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Active ET Machines</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1" Color="Color.Info">@_activeMachinesCount</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(59, 130, 246, 0.14); color: #3B82F6;">
+                            <MudIcon Icon="@Icons.Material.Rounded.Memory" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Site: <strong>@_selectedSite</strong> (ET Banks only)
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Peak Output Hour</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1" Color="Color.Warning">@_peakHourQty.ToString("N0")</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(245, 158, 11, 0.14); color: #F59E0B;">
+                            <MudIcon Icon="@Icons.Material.Rounded.Bolt" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Hour: <strong>@_peakHourLabel</strong>
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- 5. MAIN TREND CHART (BY HOUR / BY DAY) + BREAKDOWN (CUSTOMER / PROJECT / FAMILY) -->
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                                @(_trendMode == "HOUR" ? "Hourly ET Production" : "Daily ET Production Trend")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Always-visible values shown below the chart
+                            </MudText>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="chart-toggle-group">
+                                <MudButton Size="Size.Small" Variant="@(_trendMode == "HOUR" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => { _trendMode = "HOUR"; RecomputeTrendChart(); })">By Hour</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_trendMode == "DAY" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => { _trendMode = "DAY"; RecomputeTrendChart(); })">By Day</MudButton>
+                            </div>
+                            <div class="chart-toggle-group">
+                                <MudButton Size="Size.Small" Variant="@(_trendChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _trendChartType = ChartType.Bar)">Bar</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_trendChartType == ChartType.Line ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _trendChartType = ChartType.Line)">Line</MudButton>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (_trendSeries.Count > 0 && _trendLabels.Length > 0)
+                    {
+                        <MudChart T="double" ChartType="@_trendChartType" ChartSeries="@_trendSeries" ChartLabels="@_trendLabels" Width="100%" Height="270px" />
+                        <div class="data-pill-strip">
+                            @foreach (var item in _trendItems)
+                            {
+                                <span class="data-pill">
+                                    <strong>@item.Label</strong>
+                                    <span>@item.Qty.ToString("N0")</span>
+                                    <span style="opacity: 0.65;">(@item.SharePercent.ToString("0.0")%)</span>
+                                </span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pa-10 text-center text-muted">No ET production found for these filters.</div>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Switchable Breakdown Chart (Customer / Project / Family) -->
+            <MudItem xs="12" md="5">
+                <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Breakdown by @_breakdownDimension</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Select dimension & chart style</MudText>
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                            <div class="chart-toggle-group">
+                                <MudButton Size="Size.Small" Variant="@(_breakdownDimension == "Customer" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => SetBreakdownDimension("Customer"))">Customer</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_breakdownDimension == "Project" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => SetBreakdownDimension("Project"))">Project</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_breakdownDimension == "Family" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => SetBreakdownDimension("Family"))">Family</MudButton>
+                            </div>
+                            <div class="chart-toggle-group">
+                                <MudButton Size="Size.Small" Variant="@(_breakdownChartType == ChartType.Donut ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _breakdownChartType = ChartType.Donut)">Donut</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_breakdownChartType == ChartType.Pie ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _breakdownChartType = ChartType.Pie)">Pie</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_breakdownChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _breakdownChartType = ChartType.Bar)">Bar</MudButton>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (_breakdownItems.Count > 0)
+                    {
+                        <div class="d-flex justify-center my-1">
+                            @if (_breakdownChartType == ChartType.Bar)
+                            {
+                                <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_breakdownBarSeries" ChartLabels="@_breakdownShortLabels" Width="100%" Height="230px" />
+                            }
+                            else
+                            {
+                                <MudChart T="double" ChartType="@_breakdownChartType" ChartSeries="@_breakdownValues.AsChartDataSet()" ChartLabels="@_breakdownChartLabels" Width="220px" Height="220px" />
+                            }
+                        </div>
+                        <div class="data-pill-strip">
+                            @for (int i = 0; i < _breakdownItems.Count; i++)
+                            {
+                                var item = _breakdownItems[i];
+                                <span class="data-pill">
+                                    <span class="data-pill-dot" style="@($"background: {GetPaletteColor(i)};")"></span>
+                                    <strong>@item.Label</strong>
+                                    <span>@item.Qty.ToString("N0")</span>
+                                    <span style="opacity: 0.7;">(@item.SharePercent.ToString("0.0")%)</span>
+                                </span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pa-10 text-center text-muted">No breakdown data available.</div>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- 6. SHIFT & LINE COMPARISON + TOP-N REFERENCE PARETO (%) -->
+        <MudGrid Spacing="3">
+            <!-- Practical Shift / Line Comparison Card -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
+                                @(_compareMode == "SHIFT" ? "Shift Comparison" : "Line Comparison")
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(_compareMode == "SHIFT" ? "Side-by-side output using your site's custom shift hours" : "Side-by-side output across lines for current filters")
+                            </MudText>
+                        </div>
+                        <div class="chart-toggle-group">
+                            <MudButton Size="Size.Small" Variant="@(_compareMode == "SHIFT" ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => { _compareMode = "SHIFT"; RecomputeComparison(); })">Compare Shifts</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_compareMode == "LINE" ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => { _compareMode = "LINE"; RecomputeComparison(); })">Compare Lines</MudButton>
+                        </div>
+                    </div>
+
+                    @if (_compareItems.Count > 0)
+                    {
+                        <MudGrid Spacing="2" Class="mb-3">
+                            @for (int i = 0; i < _compareItems.Count; i++)
+                            {
+                                var item = _compareItems[i];
+                                <MudItem xs="6" sm="4">
+                                    <div class="compare-tile">
+                                        <div class="d-flex justify-space-between align-center">
+                                            <MudText Typo="Typo.caption" Class="font-weight-bold" Style="@($"color: {GetPaletteColor(i)};")">@item.Label</MudText>
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@($"{item.SharePercent:0.0}%")</MudChip>
+                                        </div>
+                                        <MudText Typo="Typo.h5" Class="font-weight-bold mt-1">@item.Qty.ToString("N0")</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@item.Subtitle</MudText>
+                                        <MudProgressLinear Value="@item.SharePercent" Color="Color.Primary" Rounded="true" Size="Size.Small" Class="mt-2" />
+                                    </div>
+                                </MudItem>
+                            }
+                        </MudGrid>
+
+                        <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_compareBarSeries" ChartLabels="@_compareLabels" Width="100%" Height="210px" />
+                    }
+                    else
+                    {
+                        <div class="pa-8 text-center text-muted">No comparison data available.</div>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <!-- Top-N Reference % Pareto (Handles 50-100+ References Cleanly) -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Top References Share (%)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Showing Top @_topRefCount of @_referenceSummaries.Count reference(s) + Others
+                            </MudText>
+                        </div>
+                        <div class="chart-toggle-group">
+                            <MudButton Size="Size.Small" Variant="@(_topRefCount == 10 ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => { _topRefCount = 10; RecomputeReferencePareto(); })">Top 10</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_topRefCount == 15 ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => { _topRefCount = 15; RecomputeReferencePareto(); })">Top 15</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_topRefCount == 20 ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => { _topRefCount = 20; RecomputeReferencePareto(); })">Top 20</MudButton>
+                        </div>
+                    </div>
+
+                    @if (_paretoItems.Count > 0)
+                    {
+                        <div style="max-height: 360px; overflow-y: auto; padding-right: 4px;">
+                            @for (int i = 0; i < _paretoItems.Count; i++)
+                            {
+                                var item = _paretoItems[i];
+                                <div class="pareto-row">
+                                    <div class="d-flex justify-space-between align-center mb-1">
+                                        <div class="d-flex align-center gap-2" style="min-width: 0;">
+                                            <span class="data-pill-dot" style="@($"background: {GetPaletteColor(i)};")"></span>
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold text-truncate">@item.Label</MudText>
+                                            @if (!string.IsNullOrWhiteSpace(item.Subtitle))
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-truncate">@item.Subtitle</MudText>
+                                            }
+                                        </div>
+                                        <div class="d-flex align-center gap-2" style="white-space: nowrap;">
+                                            <MudText Typo="Typo.body2" Class="font-weight-bold">@item.Qty.ToString("N0")</MudText>
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">@($"{item.SharePercent:0.0}%")</MudChip>
+                                        </div>
+                                    </div>
+                                    <MudProgressLinear Value="@item.SharePercent" Color="@(item.Label.StartsWith("Others") ? Color.Default : Color.Secondary)" Rounded="true" Size="Size.Small" />
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pa-8 text-center text-muted">No reference data available.</div>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- 7. CLEAN REFERENCE PRODUCTION TABLE (No Line, No Hostname) -->
+        <MudPaper Elevation="0" Class="pa-4 bento-card">
+            <MudDataGrid T="ProductionReferenceSummary"
+                         Items="@_referenceSummaries"
+                         Dense="true"
+                         Hover="true"
+                         Striped="true"
+                         Filterable="true"
+                         FilterMode="DataGridFilterMode.ColumnFilterMenu"
+                         Groupable="true"
+                         SortMode="SortMode.Multiple"
+                         QuickFilter="@_refQuickFilter"
+                         Class="compact-grid"
+                         Elevation="0">
+                <ToolBarContent>
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Production by Reference</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Aggregated ET output by Reference, Customer, Project, and Family</MudText>
+                    </div>
+                    <MudSpacer />
+                    <MudTextField @bind-Value="_refSearch" Placeholder="Search reference, customer, family..."
+                                  Adornment="Adornment.Start" Immediate="true" AdornmentIcon="@Icons.Material.Rounded.Search"
+                                  Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width: 260px;" Class="mr-2" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small"
+                               StartIcon="@Icons.Material.Rounded.FileDownload" OnClick="ExportCsvAsync"
+                               Disabled="@(_referenceSummaries.Count == 0)">
+                        Export CSV
+                    </MudButton>
+                </ToolBarContent>
+                <Columns>
+                    <PropertyColumn Property="x => x.Ref" Title="Reference" />
+                    <PropertyColumn Property="x => x.Customer" Title="Customer" />
+                    <PropertyColumn Property="x => x.Project" Title="Project" />
+                    <PropertyColumn Property="x => x.Family" Title="Family" />
+                    <PropertyColumn Property="x => x.TotalQty" Title="Total Qty" />
+                    <PropertyColumn Property="x => x.SharePercent" Title="Share (%)">
+                        <CellTemplate>
+                            <div class="d-flex align-center gap-2" style="min-width: 120px;">
+                                <MudProgressLinear Color="Color.Secondary" Value="@context.Item.SharePercent" Rounded="true" Size="Size.Small" Style="width: 65px;" />
+                                <MudText Typo="Typo.caption" Class="font-weight-bold">@($"{context.Item.SharePercent:0.0}%")</MudText>
+                            </div>
+                        </CellTemplate>
+                    </PropertyColumn>
+                </Columns>
+                <PagerContent>
+                    <MudDataGridPager T="ProductionReferenceSummary" />
+                </PagerContent>
+            </MudDataGrid>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    private static readonly string[] Palette =
+    {
+        "#0066CC", "#10B981", "#F59E0B", "#8B5CF6", "#06B6D4",
+        "#EF4444", "#EC4899", "#14B8A6", "#6366F1", "#64748B"
+    };
+
+    private static string GetPaletteColor(int index) => Palette[index % Palette.Length];
+
+    private string _selectedSite = string.Empty;
+    private DateTime? _startDate = DateTime.Today;
+    private DateTime? _endDate = DateTime.Today;
+    private string _activePreset = "TODAY";
+
+    private string _selectedShift = "ALL";
+    private bool _showShiftConfig = false;
+    private int _s1Start = 6, _s1End = 14;
+    private int _s2Start = 14, _s2End = 22;
+    private int _s3Start = 22, _s3End = 6;
+
+    private string _selectedCustomer = "ALL";
+    private string _selectedProject = "ALL";
+    private string _selectedFamily = "ALL";
+    private string _selectedLine = "ALL";
+    private string _refSearch = string.Empty;
+
+    private bool _isLoading = false;
+    private bool _hasLoaded = false;
+    private string? _errorMessage;
+
+    private List<ProductionRawRecord> _rawRows = new();
+    private List<ProductionRawRecord> _filteredRows = new();
+    private List<ProductionReferenceSummary> _referenceSummaries = new();
+
+    private int _totalQty = 0;
+    private double _avgQtyPerActiveHour = 0;
+    private int _activeMachinesCount = 0;
+    private int _peakHourQty = 0;
+    private string _peakHourLabel = "-";
+
+    // Trend chart (By Hour / By Day)
+    private string _trendMode = "HOUR";
+    private ChartType _trendChartType = ChartType.Bar;
+    private List<ProductionBucketItem> _trendItems = new();
+    private List<ChartSeries<double>> _trendSeries = new();
+    private string[] _trendLabels = Array.Empty<string>();
+
+    // Breakdown chart (Customer / Project / Family)
+    private string _breakdownDimension = "Customer";
+    private ChartType _breakdownChartType = ChartType.Donut;
+    private List<ProductionBucketItem> _breakdownItems = new();
+    private double[] _breakdownValues = Array.Empty<double>();
+    private string[] _breakdownChartLabels = Array.Empty<string>();
+    private string[] _breakdownShortLabels = Array.Empty<string>();
+    private List<ChartSeries<double>> _breakdownBarSeries = new();
+
+    // Comparison (Shifts / Lines)
+    private string _compareMode = "SHIFT";
+    private List<ProductionBucketItem> _compareItems = new();
+    private string[] _compareLabels = Array.Empty<string>();
+    private List<ChartSeries<double>> _compareBarSeries = new();
+
+    // Top-N Reference Pareto
+    private int _topRefCount = 10;
+    private List<ProductionBucketItem> _paretoItems = new();
+
+    private List<string> AvailableSites => AppState.CurrentUser?.AccessibleSites ?? new List<string>();
+
+    private List<string> AvailableCustomers => _rawRows
+        .Select(r => r.Customer).Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct().OrderBy(x => x).ToList();
+
+    private List<string> AvailableProjects => _rawRows
+        .Where(r => _selectedCustomer == "ALL" || r.Customer == _selectedCustomer)
+        .Select(r => r.Project).Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct().OrderBy(x => x).ToList();
+
+    private List<string> AvailableFamilies => _rawRows
+        .Where(r => (_selectedCustomer == "ALL" || r.Customer == _selectedCustomer)
+                 && (_selectedProject == "ALL" || r.Project == _selectedProject))
+        .Select(r => r.Family).Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct().OrderBy(x => x).ToList();
+
+    private List<string> AvailableLines => _rawRows
+        .Where(r => (_selectedCustomer == "ALL" || r.Customer == _selectedCustomer)
+                 && (_selectedProject == "ALL" || r.Project == _selectedProject)
+                 && (_selectedFamily == "ALL" || r.Family == _selectedFamily))
+        .Select(r => r.Line).Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct().OrderBy(x => x).ToList();
+
+    private Func<ProductionReferenceSummary, bool> _refQuickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_refSearch)) return true;
+        return (x.Ref?.Contains(_refSearch, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Customer?.Contains(_refSearch, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Project?.Contains(_refSearch, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Family?.Contains(_refSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        AppState.OnChange += HandleStateChanged;
+        await AutoLoadIfSingleSiteAsync();
+    }
+
+    private async void HandleStateChanged()
+    {
+        if (!_hasLoaded && !_isLoading)
+        {
+            await AutoLoadIfSingleSiteAsync();
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AutoLoadIfSingleSiteAsync()
+    {
+        if (AvailableSites.Count == 1 && string.IsNullOrWhiteSpace(_selectedSite))
+        {
+            _selectedSite = AvailableSites[0];
+            await LoadProductionAsync();
+        }
+    }
+
+    private async Task OnSiteChangedAsync(string site)
+    {
+        if (!AvailableSites.Contains(site, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        _selectedSite = site;
+        await LoadProductionAsync();
+    }
+
+    private async Task ApplyDatePresetAsync(string preset, int daysBack)
+    {
+        _activePreset = preset;
+        _endDate = DateTime.Today;
+        _startDate = DateTime.Today.AddDays(-daysBack);
+        _trendMode = daysBack > 0 ? "DAY" : "HOUR";
+        if (!string.IsNullOrWhiteSpace(_selectedSite))
+        {
+            await LoadProductionAsync();
+        }
+    }
+
+    private async Task LoadProductionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedSite) || !AvailableSites.Contains(_selectedSite, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        _isLoading = true;
+        _errorMessage = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var start = _startDate ?? DateTime.Today;
+            var end = _endDate ?? DateTime.Today;
+
+            _rawRows = await TraceabilityRepository.GetProductionDataAsync(_selectedSite, start, end);
+            ResetHierarchyFilters(recompute: false);
+            RecomputeDashboard();
+            _hasLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading production data for {_selectedSite}: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnShiftChanged(string shift) { _selectedShift = shift; RecomputeDashboard(); }
+    private void OnCustomerChanged(string val) { _selectedCustomer = val; _selectedProject = "ALL"; _selectedFamily = "ALL"; _selectedLine = "ALL"; RecomputeDashboard(); }
+    private void OnProjectChanged(string val) { _selectedProject = val; _selectedFamily = "ALL"; _selectedLine = "ALL"; RecomputeDashboard(); }
+    private void OnFamilyChanged(string val) { _selectedFamily = val; _selectedLine = "ALL"; RecomputeDashboard(); }
+    private void OnLineChanged(string val) { _selectedLine = val; RecomputeDashboard(); }
+    private void SetBreakdownDimension(string dim) { _breakdownDimension = dim; RecomputeBreakdownChart(); }
+
+    private void ResetHierarchyFilters() => ResetHierarchyFilters(true);
+    private void ResetHierarchyFilters(bool recompute)
+    {
+        _selectedCustomer = "ALL";
+        _selectedProject = "ALL";
+        _selectedFamily = "ALL";
+        _selectedLine = "ALL";
+        if (recompute) RecomputeDashboard();
+    }
+
+    private bool MatchesSpecificShift(int hour, string shiftKey)
+    {
+        var (start, end) = shiftKey switch
+        {
+            "S1" => (_s1Start, _s1End),
+            "S2" => (_s2Start, _s2End),
+            "S3" => (_s3Start, _s3End),
+            _ => (0, 24)
+        };
+        return start < end
+            ? (hour >= start && hour < end)
+            : (hour >= start || hour < end);
+    }
+
+    private bool MatchesShift(int hour) => _selectedShift == "ALL" || MatchesSpecificShift(hour, _selectedShift);
+
+    private void RecomputeDashboard()
+    {
+        _filteredRows = _rawRows
+            .Where(r => MatchesShift(r.Hour)
+                     && (_selectedCustomer == "ALL" || r.Customer == _selectedCustomer)
+                     && (_selectedProject == "ALL" || r.Project == _selectedProject)
+                     && (_selectedFamily == "ALL" || r.Family == _selectedFamily)
+                     && (_selectedLine == "ALL" || r.Line == _selectedLine))
+            .ToList();
+
+        _totalQty = _filteredRows.Sum(r => r.TotalQty);
+        _activeMachinesCount = _filteredRows.Select(r => r.Hostname).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+        var byHour = _filteredRows
+            .GroupBy(r => r.Hour)
+            .Select(g => new { Hour = g.Key, Qty = g.Sum(x => x.TotalQty) })
+            .OrderBy(x => x.Hour)
+            .ToList();
+
+        _avgQtyPerActiveHour = byHour.Count > 0 ? (double)_totalQty / byHour.Count : 0;
+        var peak = byHour.OrderByDescending(x => x.Qty).FirstOrDefault();
+        _peakHourQty = peak?.Qty ?? 0;
+        _peakHourLabel = peak is not null ? $"{peak.Hour:00}:00 – {(peak.Hour + 1) % 24:00}:00" : "-";
+
+        // Clean Reference Summary (strictly Reference, Customer, Project, Family - no Line/Hostname)
+        _referenceSummaries = _filteredRows
+            .GroupBy(r => new { r.Ref, r.Customer, r.Project, r.Family })
+            .Select(g =>
+            {
+                var qty = g.Sum(x => x.TotalQty);
+                return new ProductionReferenceSummary
+                {
+                    Ref = g.Key.Ref,
+                    Customer = g.Key.Customer,
+                    Project = g.Key.Project,
+                    Family = g.Key.Family,
+                    TotalQty = qty,
+                    SharePercent = _totalQty > 0 ? Math.Round(qty * 100.0 / _totalQty, 1) : 0
+                };
+            })
+            .OrderByDescending(x => x.TotalQty)
+            .ToList();
+
+        RecomputeTrendChart();
+        RecomputeBreakdownChart();
+        RecomputeComparison();
+        RecomputeReferencePareto();
+    }
+
+    private void RecomputeTrendChart()
+    {
+        if (_trendMode == "DAY")
+        {
+            _trendItems = _filteredRows
+                .GroupBy(r => r.Date.Date)
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    var qty = g.Sum(x => x.TotalQty);
+                    return new ProductionBucketItem
+                    {
+                        Label = g.Key.ToString("dd/MM"),
+                        Qty = qty,
+                        SharePercent = _totalQty > 0 ? Math.Round(qty * 100.0 / _totalQty, 1) : 0
+                    };
+                })
+                .ToList();
+        }
+        else
+        {
+            _trendItems = _filteredRows
+                .GroupBy(r => r.Hour)
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    var qty = g.Sum(x => x.TotalQty);
+                    return new ProductionBucketItem
+                    {
+                        Label = $"{g.Key:00}h",
+                        Qty = qty,
+                        SharePercent = _totalQty > 0 ? Math.Round(qty * 100.0 / _totalQty, 1) : 0
+                    };
+                })
+                .ToList();
+        }
+
+        _trendLabels = _trendItems.Select(x => x.Label).ToArray();
+        _trendSeries = _trendItems.Count > 0
+            ? new List<ChartSeries<double>> { new() { Name = "Produced Qty", Data = _trendItems.Select(x => (double)x.Qty).ToArray() } }
+            : new();
+    }
+
+    private void RecomputeBreakdownChart()
+    {
+        var grouped = (_breakdownDimension switch
+            {
+                "Project" => _filteredRows.GroupBy(r => r.Project),
+                "Family" => _filteredRows.GroupBy(r => r.Family),
+                _ => _filteredRows.GroupBy(r => r.Customer)
+            })
+            .Select(g => new { Name = g.Key, Qty = g.Sum(x => x.TotalQty) })
+            .OrderByDescending(x => x.Qty)
+            .ToList();
+
+        var top = grouped.Take(7).ToList();
+        var restQty = grouped.Skip(7).Sum(x => x.Qty);
+
+        _breakdownItems = top.Select(x => new ProductionBucketItem
+        {
+            Label = x.Name,
+            Qty = x.Qty,
+            SharePercent = _totalQty > 0 ? Math.Round(x.Qty * 100.0 / _totalQty, 1) : 0
+        }).ToList();
+
+        if (restQty > 0)
+        {
+            _breakdownItems.Add(new ProductionBucketItem
+            {
+                Label = $"Others ({grouped.Count - 7})",
+                Qty = restQty,
+                SharePercent = _totalQty > 0 ? Math.Round(restQty * 100.0 / _totalQty, 1) : 0
+            });
+        }
+
+        _breakdownValues = _breakdownItems.Select(x => (double)x.Qty).ToArray();
+        _breakdownShortLabels = _breakdownItems.Select(x => x.Label).ToArray();
+        _breakdownChartLabels = _breakdownItems.Select(x => $"{x.Label} ({x.SharePercent:0.0}%)").ToArray();
+        _breakdownBarSeries = _breakdownValues.Length > 0
+            ? new List<ChartSeries<double>> { new() { Name = "Qty", Data = _breakdownValues } }
+            : new();
+    }
+
+    private void RecomputeComparison()
+    {
+        if (_compareMode == "SHIFT")
+        {
+            // Compare all 3 shifts respecting active Customer/Project/Family/Line filters
+            var hierarchyRows = _rawRows
+                .Where(r => (_selectedCustomer == "ALL" || r.Customer == _selectedCustomer)
+                         && (_selectedProject == "ALL" || r.Project == _selectedProject)
+                         && (_selectedFamily == "ALL" || r.Family == _selectedFamily)
+                         && (_selectedLine == "ALL" || r.Line == _selectedLine))
+                .ToList();
+
+            var grandTotal = hierarchyRows.Sum(r => r.TotalQty);
+            var shifts = new[]
+            {
+                ("Shift 1", "S1", $"{_s1Start:00}h – {_s1End:00}h"),
+                ("Shift 2", "S2", $"{_s2Start:00}h – {_s2End:00}h"),
+                ("Shift 3", "S3", $"{_s3Start:00}h – {_s3End:00}h")
+            };
+
+            _compareItems = shifts.Select(s =>
+            {
+                var rows = hierarchyRows.Where(r => MatchesSpecificShift(r.Hour, s.Item2)).ToList();
+                var qty = rows.Sum(r => r.TotalQty);
+                var hrs = rows.Select(r => (r.Date.Date, r.Hour)).Distinct().Count();
+                return new ProductionBucketItem
+                {
+                    Label = s.Item1,
+                    Subtitle = $"{s.Item3} • {(hrs > 0 ? (qty / (double)hrs).ToString("N0") : "0")}/hr",
+                    Qty = qty,
+                    SharePercent = grandTotal > 0 ? Math.Round(qty * 100.0 / grandTotal, 1) : 0
+                };
+            }).ToList();
+        }
+        else
+        {
+            // Compare all Lines respecting active Shift/Customer/Project/Family filters
+            var lineScopeRows = _rawRows
+                .Where(r => MatchesShift(r.Hour)
+                         && (_selectedCustomer == "ALL" || r.Customer == _selectedCustomer)
+                         && (_selectedProject == "ALL" || r.Project == _selectedProject)
+                         && (_selectedFamily == "ALL" || r.Family == _selectedFamily))
+                .ToList();
+
+            var grandTotal = lineScopeRows.Sum(r => r.TotalQty);
+            _compareItems = lineScopeRows
+                .GroupBy(r => r.Line)
+                .Select(g =>
+                {
+                    var qty = g.Sum(x => x.TotalQty);
+                    var refs = g.Select(x => x.Ref).Distinct().Count();
+                    return new ProductionBucketItem
+                    {
+                        Label = g.Key,
+                        Subtitle = $"{refs} ref(s)",
+                        Qty = qty,
+                        SharePercent = grandTotal > 0 ? Math.Round(qty * 100.0 / grandTotal, 1) : 0
+                    };
+                })
+                .OrderByDescending(x => x.Qty)
+                .Take(9)
+                .ToList();
+        }
+
+        _compareLabels = _compareItems.Select(x => x.Label).ToArray();
+        _compareBarSeries = _compareItems.Count > 0
+            ? new List<ChartSeries<double>> { new() { Name = "Qty", Data = _compareItems.Select(x => (double)x.Qty).ToArray() } }
+            : new();
+    }
+
+    private void RecomputeReferencePareto()
+    {
+        var top = _referenceSummaries.Take(_topRefCount).ToList();
+        var rest = _referenceSummaries.Skip(_topRefCount).ToList();
+
+        _paretoItems = top.Select(r => new ProductionBucketItem
+        {
+            Label = r.Ref,
+            Subtitle = $"{r.Customer} • {r.Family}",
+            Qty = r.TotalQty,
+            SharePercent = r.SharePercent
+        }).ToList();
+
+        if (rest.Count > 0)
+        {
+            var restQty = rest.Sum(x => x.TotalQty);
+            _paretoItems.Add(new ProductionBucketItem
+            {
+                Label = $"Others ({rest.Count} refs)",
+                Subtitle = "Combined remaining references",
+                Qty = restQty,
+                SharePercent = _totalQty > 0 ? Math.Round(restQty * 100.0 / _totalQty, 1) : 0
+            });
+        }
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Reference,Customer,Project,Family,Total Qty,Share (%)");
+        foreach (var r in _referenceSummaries)
+        {
+            sb.AppendLine($"\"{r.Ref}\",\"{r.Customer}\",\"{r.Project}\",\"{r.Family}\",{r.TotalQty},{r.SharePercent}");
+        }
+
+        var fileName = $"Production_{_selectedSite}_{(_startDate ?? DateTime.Today):yyyyMMdd}_{(_endDate ?? DateTime.Today):yyyyMMdd}.csv";
+        await JS.InvokeVoidAsync("htDownloadCsv", fileName, sb.ToString());
+        Snackbar.Add($"Exported {fileName}", Severity.Success);
+    }
+
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleStateChanged;
+    }
+}

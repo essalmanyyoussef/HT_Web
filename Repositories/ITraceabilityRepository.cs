@@ -49,4 +49,8 @@ public interface ITraceabilityRepository
         DateTime endDate,
         string? siteFilter,
         List<string> allowedSites);
+    Task<List<ProductionRawRecord>> GetProductionDataAsync(
+        string site,
+        DateTime startDate,
+        DateTime endDate);
 }

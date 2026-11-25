@@ -53,6 +53,24 @@
         background: linear-gradient(180deg, rgba(10, 37, 64, 0.06) 0%, rgba(10, 37, 64, 0.02) 100%);
         border-bottom: 2px solid var(--mud-palette-primary);
     }
+    .report-pill-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--mud-palette-divider);
+    }
+    .report-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        background: rgba(15, 23, 42, 0.04);
+        border: 1px solid var(--mud-palette-divider);
+    }
 </style>
 
 <MudStack Spacing="4">
@@ -246,7 +264,16 @@
                                   ChartSeries="@_dailySeries"
                                   ChartLabels="@_dailyLabels"
                                   Width="100%"
-                                  Height="300px" />
+                                  Height="300px" />                        <div class="report-pill-strip">
+                            @foreach (var d in _stats.DailyStats)
+                            {
+                                <span class="report-pill">
+                                    <strong>@d.Date.ToString("dd/MM")</strong>
+                                    <span>@d.TotalCount searches</span>
+                                    <span style="opacity: 0.65;">(@d.DistinctUsersCount users)</span>
+                                </span>
+                            }
+                        </div>
                     }
                     else
                     {
@@ -294,7 +321,21 @@
                                           Width="240px"
                                           Height="240px" />
                             }
-                        }
+                        }                    </div>
+                    @if (_stats.SiteStats.Count > 0)
+                    {
+                        <div class="report-pill-strip">
+                            @foreach (var s in _stats.SiteStats)
+                            {
+                                <span class="report-pill">
+                                    <strong>@s.Site</strong>
+                                    <span>@s.TotalCount</span>
+                                    <span style="opacity: 0.7;">(@s.SharePercent.ToString("0.0")%)</span>
+                                </span>
+                            }
+                        </div>
+                    }
+                    <div class="d-none">
                         else
                         {
                             <div class="pa-10 text-center text-muted">No site activity yet.</div>
