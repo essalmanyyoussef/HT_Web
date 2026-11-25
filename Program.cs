@@ -8,6 +8,7 @@ using HT_Web.Repositories;
 using HT_Web.Data;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddServiceDefaults();
 builder.Services.AddMudServices();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpContextAccessor();
@@ -39,6 +40,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.MapDefaultEndpoints();
 
 
 app.UseAntiforgery();

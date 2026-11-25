@@ -10,6 +10,25 @@
 
 
   <ItemGroup>
+    <Compile Remove="HT_Web.AppHost\**" />
+    <Content Remove="HT_Web.AppHost\**" />
+    <EmbeddedResource Remove="HT_Web.AppHost\**" />
+    <None Remove="HT_Web.AppHost\**" />
+    <Compile Remove="HT_Web.ServiceDefaults\**" />
+    <Content Remove="HT_Web.ServiceDefaults\**" />
+    <EmbeddedResource Remove="HT_Web.ServiceDefaults\**" />
+    <Compile Remove="ET_Training\**" />
+    <Content Remove="ET_Training\**" />
+    <EmbeddedResource Remove="ET_Training\**" />
+    <None Remove="ET_Training\**" />
+    <None Remove="HT_Web.ServiceDefaults\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="HT_Web.ServiceDefaults\HT_Web.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.89" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageReference Include="MudBlazor" Version="9.12.0" />
