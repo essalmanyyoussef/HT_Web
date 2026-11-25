@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="ET_Training\**" />
+    <Content Remove="ET_Training\**" />
+    <EmbeddedResource Remove="ET_Training\**" />
+    <None Remove="ET_Training\**" />
+  </ItemGroup>
+
+</Project>

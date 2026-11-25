@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HT_Web.csproj" />
+	<ProjectReference Include="..\ET_Training\ET_Training.csproj" />
   </ItemGroup>
 
 </Project>
