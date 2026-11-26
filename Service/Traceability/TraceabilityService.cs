@@ -102,7 +102,9 @@ public class TraceabilityService : ITraceabilityService
         else
         {
             // Single-scan WHERE Part IN @Keys instead of N sequential full table scans
-            rawErrors = await _repository.GetErrorsByKeysAsync(request.Site, searchKeys);
+            DateTime? minDate = processHistory.Count > 0 ? processHistory.Min(x => x.TestDate).AddDays(-2) : null;
+            DateTime? maxDate = processHistory.Count > 0 ? processHistory.Max(x => x.TestDate).AddDays(1) : null;
+            rawErrors = await _repository.GetErrorsByKeysAsync(request.Site, searchKeys, minDate, maxDate);
         }
 
         var groupedErrors = GroupErrorRecords(rawErrors);

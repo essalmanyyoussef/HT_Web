@@ -9,6 +9,8 @@ public class TraceabilityRepository : ITraceabilityRepository
 {
     private readonly SqlConnectionFactory _connectionFactory;
 
+    private static DbString Ansi(string value) => new() { Value = value, IsAnsi = true, Length = Math.Max(value.Length, 255) };
+
     public TraceabilityRepository(
         SqlConnectionFactory connectionFactory)
     {
@@ -49,7 +51,7 @@ WHERE OUT_Barcode = @FinalLabel
                     sql,
                     new
                     {
-                        FinalLabel = finalLabel
+                        FinalLabel = Ansi(finalLabel)
                     },
                     commandTimeout: 300));
 
@@ -91,7 +93,7 @@ ORDER BY DateEnd ASC
                     sql,
                     new
                     {
-                        TravelTicket = travelTicket
+                        TravelTicket = Ansi(travelTicket)
                     },
                     commandTimeout: 300));
 
@@ -144,7 +146,7 @@ ORDER BY DateBegin DESC
                     sql,
                     new
                     {
-                        TravelTicket = travelTicket
+                        TravelTicket = Ansi(travelTicket)
                     },
                     commandTimeout: 300));
 
@@ -181,7 +183,7 @@ AND (
                     sql,
                     new
                     {
-                        TravelTicket = travelTicket
+                        TravelTicket = Ansi(travelTicket)
                     },
                     commandTimeout: 300));
 
@@ -205,7 +207,7 @@ AND (
         return await connection.QueryFirstOrDefaultAsync<string>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname, TestDate = testDate },
+                new { Hostname = Ansi(hostname), TestDate = testDate },
                 commandTimeout: 300));
     }
 
@@ -227,7 +229,7 @@ AND (
         var row = await connection.QueryFirstOrDefaultAsync<(DateTime DateBegin, DateTime DateEnd)?>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname, TestDate = testDate },
+                new { Hostname = Ansi(hostname), TestDate = testDate },
                 commandTimeout: 300));
 
         return row;
@@ -263,7 +265,8 @@ AND (
             FROM dbo.solvederrors WITH (NOLOCK)
             WHERE Hostname = @Hostname
               AND DateBegin BETWEEN @DateBegin AND @DateEnd
-            ORDER BY DateBegin DESC";
+            ORDER BY DateBegin DESC
+            OPTION (RECOMPILE)";
 
         using var connection = _connectionFactory.CreateConnection(site);
         await connection.OpenAsync();
@@ -271,7 +274,7 @@ AND (
         var result = await connection.QueryAsync<SolvedErrorRecord>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname, DateBegin = dateBegin, DateEnd = dateEnd },
+                new { Hostname = Ansi(hostname), DateBegin = dateBegin, DateEnd = dateEnd },
                 commandTimeout: 300));
 
         return result.ToList();
@@ -537,7 +540,7 @@ ORDER BY DateEnd DESC;";
         var result = await connection.QueryAsync<TraceabilityRecord>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname.Trim(), StartDate = startDate, EndDate = endDate },
+                new { Hostname = Ansi(hostname.Trim()), StartDate = startDate, EndDate = endDate },
                 commandTimeout: 180));
 
         return result.ToList();
@@ -570,7 +573,7 @@ ORDER BY Hostname ASC;";
         var result = await connection.QueryAsync<HostnameLookupItem>(
             new CommandDefinition(
                 sql,
-                new { SearchValue = searchValue.Trim() },
+                new { SearchValue = Ansi(searchValue.Trim()) },
                 commandTimeout: 120));
 
         return result.ToList();
@@ -668,7 +671,9 @@ ORDER BY Hostname ASC;";
     }
     public async Task<List<SolvedErrorRecord>> GetErrorsByKeysAsync(
         string site,
-        List<string> travelTickets)
+        List<string> travelTickets,
+        DateTime? minDate = null,
+        DateTime? maxDate = null)
     {
         var keys = travelTickets
             .Where(k => !string.IsNullOrWhiteSpace(k))
@@ -678,7 +683,11 @@ ORDER BY Hostname ASC;";
         if (keys.Count == 0)
             return new List<SolvedErrorRecord>();
 
-        const string sql = @"
+        var dateClause = (minDate.HasValue && maxDate.HasValue)
+            ? "AND DateBegin BETWEEN @MinDate AND @MaxDate"
+            : string.Empty;
+
+        var sql = $@"
 SELECT
     Ref             AS Reference,
     Batch,
@@ -701,13 +710,18 @@ SELECT
     Hostname
 FROM dbo.solvederrors WITH (NOLOCK)
 WHERE Part IN @Keys
-ORDER BY DateBegin DESC;";
+  {dateClause}
+ORDER BY DateBegin DESC
+OPTION (RECOMPILE);";
 
         using var connection = _connectionFactory.CreateConnection(site);
         await connection.OpenAsync();
 
         var result = await connection.QueryAsync<SolvedErrorRecord>(
-            new CommandDefinition(sql, new { Keys = keys }, commandTimeout: 300));
+            new CommandDefinition(
+                sql,
+                new { Keys = keys.Select(Ansi).ToList(), MinDate = minDate, MaxDate = maxDate },
+                commandTimeout: 300));
 
         return result.ToList();
     }

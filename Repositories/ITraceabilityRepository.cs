@@ -68,5 +68,7 @@ public interface ITraceabilityRepository
         string site);
     Task<List<SolvedErrorRecord>> GetErrorsByKeysAsync(
         string site,
-        List<string> travelTickets);
+        List<string> travelTickets,
+        DateTime? minDate = null,
+        DateTime? maxDate = null);
 }
