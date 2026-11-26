@@ -2,6 +2,7 @@
 @implements IDisposable
 
 @using System.Text
+@using System.Text.Json
 @using MudBlazor
 @using Microsoft.JSInterop
 @using HT_Web.Models.Traceability
@@ -175,22 +176,22 @@
             </MudText>
             <MudGrid Spacing="2" AlignItems="Center">
                 <MudItem xs="6" sm="2">
-                    <MudNumericField T="int" Value="_s1Start" ValueChanged="@(v => { _s1Start = v; RecomputeDashboard(); })" Label="Shift 1 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudNumericField T="int" Value="_s1Start" ValueChanged="@(async v => { _s1Start = v; RecomputeDashboard(); await SaveShiftSettingsAsync(); })" Label="Shift 1 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
                 <MudItem xs="6" sm="2">
-                    <MudNumericField T="int" Value="_s1End" ValueChanged="@(v => { _s1End = v; RecomputeDashboard(); })" Label="Shift 1 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudNumericField T="int" Value="_s1End" ValueChanged="@(async v => { _s1End = v; RecomputeDashboard(); await SaveShiftSettingsAsync(); })" Label="Shift 1 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
                 <MudItem xs="6" sm="2">
-                    <MudNumericField T="int" Value="_s2Start" ValueChanged="@(v => { _s2Start = v; RecomputeDashboard(); })" Label="Shift 2 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudNumericField T="int" Value="_s2Start" ValueChanged="@(async v => { _s2Start = v; RecomputeDashboard(); await SaveShiftSettingsAsync(); })" Label="Shift 2 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
                 <MudItem xs="6" sm="2">
-                    <MudNumericField T="int" Value="_s2End" ValueChanged="@(v => { _s2End = v; RecomputeDashboard(); })" Label="Shift 2 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudNumericField T="int" Value="_s2End" ValueChanged="@(async v => { _s2End = v; RecomputeDashboard(); await SaveShiftSettingsAsync(); })" Label="Shift 2 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
                 <MudItem xs="6" sm="2">
-                    <MudNumericField T="int" Value="_s3Start" ValueChanged="@(v => { _s3Start = v; RecomputeDashboard(); })" Label="Shift 3 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudNumericField T="int" Value="_s3Start" ValueChanged="@(async v => { _s3Start = v; RecomputeDashboard(); await SaveShiftSettingsAsync(); })" Label="Shift 3 Start" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
                 <MudItem xs="6" sm="2">
-                    <MudNumericField T="int" Value="_s3End" ValueChanged="@(v => { _s3End = v; RecomputeDashboard(); })" Label="Shift 3 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudNumericField T="int" Value="_s3End" ValueChanged="@(async v => { _s3End = v; RecomputeDashboard(); await SaveShiftSettingsAsync(); })" Label="Shift 3 End" Min="0" Max="23" Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
             </MudGrid>
         </MudCollapse>
@@ -736,14 +737,54 @@
     protected override async Task OnInitializedAsync()
     {
         AppState.OnChange += HandleStateChanged;
-        await AutoLoadIfSingleSiteAsync();
+        var s = AppState.Production;
+        if (s.HasLoaded && !string.IsNullOrWhiteSpace(s.SelectedSite))
+        {
+            _selectedSite = s.SelectedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _selectedShift = s.SelectedShift;
+            _selectedCustomer = s.SelectedCustomer;
+            _selectedProject = s.SelectedProject;
+            _selectedFamily = s.SelectedFamily;
+            _selectedLine = s.SelectedLine;
+            _rawRows = s.RawRows;
+            _hasLoaded = true;
+            SaveProductionState();
+            RecomputeDashboard();
+        }
+        else
+        {
+            await AutoLoadIfSingleSiteAsync();
+        }
     }
 
     private async void HandleStateChanged()
     {
         if (!_hasLoaded && !_isLoading)
         {
+            var s = AppState.Production;
+        if (s.HasLoaded && !string.IsNullOrWhiteSpace(s.SelectedSite))
+        {
+            _selectedSite = s.SelectedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _selectedShift = s.SelectedShift;
+            _selectedCustomer = s.SelectedCustomer;
+            _selectedProject = s.SelectedProject;
+            _selectedFamily = s.SelectedFamily;
+            _selectedLine = s.SelectedLine;
+            _rawRows = s.RawRows;
+            _hasLoaded = true;
+            SaveProductionState();
+            RecomputeDashboard();
+        }
+        else
+        {
             await AutoLoadIfSingleSiteAsync();
+        }
         }
         await InvokeAsync(StateHasChanged);
     }
@@ -796,6 +837,7 @@
             ResetHierarchyFilters(recompute: false);
             RecomputeDashboard();
             _hasLoaded = true;
+            SaveProductionState();
         }
         catch (Exception ex)
         {
@@ -809,11 +851,11 @@
         }
     }
 
-    private void OnShiftChanged(string shift) { _selectedShift = shift; RecomputeDashboard(); }
-    private void OnCustomerChanged(string val) { _selectedCustomer = val; _selectedProject = "ALL"; _selectedFamily = "ALL"; _selectedLine = "ALL"; RecomputeDashboard(); }
-    private void OnProjectChanged(string val) { _selectedProject = val; _selectedFamily = "ALL"; _selectedLine = "ALL"; RecomputeDashboard(); }
-    private void OnFamilyChanged(string val) { _selectedFamily = val; _selectedLine = "ALL"; RecomputeDashboard(); }
-    private void OnLineChanged(string val) { _selectedLine = val; RecomputeDashboard(); }
+    private void OnShiftChanged(string shift) { _selectedShift = shift; RecomputeDashboard(); SaveProductionState(); }
+    private void OnCustomerChanged(string val) { _selectedCustomer = val; _selectedProject = "ALL"; _selectedFamily = "ALL"; _selectedLine = "ALL"; RecomputeDashboard(); SaveProductionState(); }
+    private void OnProjectChanged(string val) { _selectedProject = val; _selectedFamily = "ALL"; _selectedLine = "ALL"; RecomputeDashboard(); SaveProductionState(); }
+    private void OnFamilyChanged(string val) { _selectedFamily = val; _selectedLine = "ALL"; RecomputeDashboard(); SaveProductionState(); }
+    private void OnLineChanged(string val) { _selectedLine = val; RecomputeDashboard(); SaveProductionState(); }
     private void SetBreakdownDimension(string dim) { _breakdownDimension = dim; RecomputeBreakdownChart(); }
 
     private void ResetHierarchyFilters() => ResetHierarchyFilters(true);
@@ -1082,6 +1124,71 @@
         var fileName = $"Production_{_selectedSite}_{(_startDate ?? DateTime.Today):yyyyMMdd}_{(_endDate ?? DateTime.Today):yyyyMMdd}.csv";
         await JS.InvokeVoidAsync("htDownloadCsv", fileName, sb.ToString());
         Snackbar.Add($"Exported {fileName}", Severity.Success);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrWhiteSpace(_selectedSite))
+        {
+            await LoadShiftSettingsAsync(_selectedSite);
+            if (_hasLoaded)
+            {
+                RecomputeDashboard();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void SaveProductionState()
+    {
+        var s = AppState.Production;
+        s.SelectedSite = _selectedSite;
+        s.StartDate = _startDate;
+        s.EndDate = _endDate;
+        s.ActivePreset = _activePreset;
+        s.SelectedShift = _selectedShift;
+        s.SelectedCustomer = _selectedCustomer;
+        s.SelectedProject = _selectedProject;
+        s.SelectedFamily = _selectedFamily;
+        s.SelectedLine = _selectedLine;
+        s.HasLoaded = _hasLoaded;
+        s.RawRows = _rawRows;
+    }
+
+    private async Task LoadShiftSettingsAsync(string site)
+    {
+        if (string.IsNullOrWhiteSpace(site)) return;
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", $"ht_shifts_{site}");
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                var cfg = JsonSerializer.Deserialize<SiteShiftSettings>(json);
+                if (cfg != null)
+                {
+                    _s1Start = cfg.S1Start; _s1End = cfg.S1End;
+                    _s2Start = cfg.S2Start; _s2End = cfg.S2End;
+                    _s3Start = cfg.S3Start; _s3End = cfg.S3End;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task SaveShiftSettingsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedSite)) return;
+        try
+        {
+            var cfg = new SiteShiftSettings
+            {
+                S1Start = _s1Start, S1End = _s1End,
+                S2Start = _s2Start, S2End = _s2End,
+                S3Start = _s3Start, S3End = _s3End
+            };
+            await JS.InvokeVoidAsync("localStorage.setItem", $"ht_shifts_{_selectedSite}", JsonSerializer.Serialize(cfg));
+        }
+        catch { }
     }
 
     public void Dispose()

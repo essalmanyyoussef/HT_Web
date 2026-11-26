@@ -66,4 +66,7 @@ public interface ITraceabilityRepository
 
     Task<List<HostnameLookupItem>> FindHostnamesBySiteBanksAsync(
         string site);
+    Task<List<SolvedErrorRecord>> GetErrorsByKeysAsync(
+        string site,
+        List<string> travelTickets);
 }

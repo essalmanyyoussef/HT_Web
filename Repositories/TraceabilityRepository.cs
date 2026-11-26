@@ -474,7 +474,7 @@ WHERE rn = 1;";
         row.Customer = customerCode switch
         {
             "PSA" or "STL" => "STELLANTIS",
-            "TYT" or "TOY" => "TOYOTA",
+            "TYT" or "TOY" or "TYTA" => "TOYOTA",
             "SUZ" => "SUZUKI",
             "RNLT" or "RENA" or "RSA" or "RNL" or "RNT" => "RENAULT",
             "NIS" or "NISS" or "NSN" => "NISSAN",
@@ -665,5 +665,50 @@ ORDER BY Hostname ASC;";
             row.Family = string.Join("_", core.Skip(2));
             row.Line = "L1";
         }
+    }
+    public async Task<List<SolvedErrorRecord>> GetErrorsByKeysAsync(
+        string site,
+        List<string> travelTickets)
+    {
+        var keys = travelTickets
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (keys.Count == 0)
+            return new List<SolvedErrorRecord>();
+
+        const string sql = @"
+SELECT
+    Ref             AS Reference,
+    Batch,
+    Part            AS TravelTicketLabel,
+    Worker          AS WorkerId,
+    Type            AS ErrorType,
+    Counterpart1    AS Tmp01,
+    Counterpart2    AS Tmp02,
+    Object,
+    Wire1,
+    Wire2,
+    Way,
+    DateBegin       AS StartDate,
+    DateEnd         AS EndDate,
+    TimeU,
+    CPV1,
+    CPV2,
+    CPV3,
+    CPV4,
+    Hostname
+FROM dbo.solvederrors WITH (NOLOCK)
+WHERE Part IN @Keys
+ORDER BY DateBegin DESC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<SolvedErrorRecord>(
+            new CommandDefinition(sql, new { Keys = keys }, commandTimeout: 300));
+
+        return result.ToList();
     }
 }

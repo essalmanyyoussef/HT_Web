@@ -750,12 +750,52 @@
     {
         AppState.OnChange += HandleStateChanged;
         _finderSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+        var s = AppState.StationHistory;
+        if (s.HasSearched)
+        {
+            _hostname = s.Hostname;
+            _resolvedSite = s.ResolvedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _records = s.Records;
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+            ComputeSummaries();
+        }
     }
 
     private void HandleStateChanged()
     {
         if (string.IsNullOrWhiteSpace(_finderSite))
             _finderSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+        var s = AppState.StationHistory;
+        if (s.HasSearched)
+        {
+            _hostname = s.Hostname;
+            _resolvedSite = s.ResolvedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _records = s.Records;
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+            ComputeSummaries();
+        }
         InvokeAsync(StateHasChanged);
     }
 
@@ -830,6 +870,14 @@
             _records = await TraceabilityRepository.GetStationHistoryAsync(site, host, start, endExclusive);
             ComputeSummaries();
             _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
         }
         catch (Exception ex)
         {
@@ -934,6 +982,26 @@
     {
         if (string.IsNullOrWhiteSpace(_finderSite))
             _finderSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+        var s = AppState.StationHistory;
+        if (s.HasSearched)
+        {
+            _hostname = s.Hostname;
+            _resolvedSite = s.ResolvedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _records = s.Records;
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+            ComputeSummaries();
+        }
         _showHostnameFinder = true;
     }
 

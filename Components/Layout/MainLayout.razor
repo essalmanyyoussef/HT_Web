@@ -1,12 +1,14 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
+@using Microsoft.JSInterop
 @using HT_Web.Theme
 @using HT_Web.Services.State
 @using HT_Web.Services.Authentication
 
 @inject ApplicationState AppState
 @inject IUserAccessService UserAccessService
+@inject IJSRuntime JS
 
 <MudThemeProvider Theme="@SEWSTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -134,6 +136,21 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            try
+            {
+                var savedDark = await JS.InvokeAsync<string?>("localStorage.getItem", "ht_dark_mode");
+                if (bool.TryParse(savedDark, out var darkVal)) _isDarkMode = darkVal;
+
+                var savedCollapsed = await JS.InvokeAsync<string?>("localStorage.getItem", "ht_sidebar_collapsed");
+                if (bool.TryParse(savedCollapsed, out var colVal)) _isCollapsed = colVal;
+
+                StateHasChanged();
+            }
+            catch { }
+        }
+
         if (firstRender && AppState.CurrentUser == null)
         {
             AppState.SetCheckingAccess(true, "Checking Active Directory identity & authorized sites...");
@@ -151,8 +168,16 @@
 
     private void HandleStateChanged() => InvokeAsync(StateHasChanged);
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
-    private void ToggleCollapse() => _isCollapsed = !_isCollapsed;
-    private void ToggleTheme() => _isDarkMode = !_isDarkMode;
+    private async Task ToggleCollapse()
+    {
+        _isCollapsed = !_isCollapsed;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "ht_sidebar_collapsed", _isCollapsed.ToString()); } catch { }
+    }
+    private async Task ToggleTheme()
+    {
+        _isDarkMode = !_isDarkMode;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "ht_dark_mode", _isDarkMode.ToString()); } catch { }
+    }
 
     public void Dispose()
     {
