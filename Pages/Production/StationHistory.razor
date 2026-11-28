@@ -1,0 +1,1101 @@
+@page "/station-history"
+@implements IDisposable
+
+@using System.Text
+@using MudBlazor
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using HT_Web.Models.Traceability
+@using HT_Web.Repositories
+@using HT_Web.Services.State
+
+@inject ITraceabilityRepository TraceabilityRepository
+@inject ApplicationState AppState
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Station Production History - SEWS-E Harness Traceability System</PageTitle>
+
+<style>
+    .station-hero {
+        background: linear-gradient(135deg, #0A2540 0%, #0F3460 55%, #0066CC 100%);
+        border-radius: 16px;
+        color: #FFFFFF;
+    }
+    .bento-card {
+        border-radius: 16px;
+        border: 1px solid var(--mud-palette-divider);
+        background: var(--mud-palette-surface);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .kpi-icon-box {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .chart-toggle-group {
+        display: inline-flex;
+        gap: 3px;
+        padding: 3px;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.05);
+        border: 1px solid var(--mud-palette-divider);
+    }
+    .data-pill-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--mud-palette-divider);
+    }
+    .data-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.74rem;
+        background: rgba(15, 23, 42, 0.04);
+        border: 1px solid var(--mud-palette-divider);
+    }
+    .data-pill-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .compact-grid .mud-table-cell {
+        padding: 5px 7px !important;
+        font-size: 0.76rem !important;
+        white-space: nowrap;
+    }
+    .compact-grid .mud-table-head .mud-table-row {
+        background: linear-gradient(180deg, rgba(10, 37, 64, 0.06) 0%, rgba(10, 37, 64, 0.02) 100%);
+        border-bottom: 2px solid var(--mud-palette-primary);
+    }
+</style>
+
+<MudStack Spacing="4">
+    <!-- 1. HERO HEADER & QUICK DATE PRESETS -->
+    <MudPaper Elevation="2" Class="pa-5 station-hero">
+        <div class="d-flex flex-wrap justify-space-between align-center gap-3">
+            <div>
+                <div class="d-flex align-center gap-2 mb-1">
+                    <MudIcon Icon="@Icons.Material.Rounded.DeveloperBoard" Style="color: #38BDF8;" />
+                    <MudText Typo="Typo.overline" Style="color: #38BDF8; letter-spacing: 0.08em;">
+                        STATION TRACEABILITY & OUTPUT
+                    </MudText>
+                </div>
+                <MudText Typo="Typo.h5" Class="font-weight-bold" Style="color: #FFFFFF;">
+                    Station Production History
+                </MudText>
+                <MudText Typo="Typo.body2" Style="color: #CBD5E1;">
+                    Query station production by Hostname and date range, or locate a machine by Barcode or Bank Hierarchy
+                </MudText>
+            </div>
+
+            <div class="d-flex flex-wrap align-center gap-2">
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "TODAY" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" OnClick="@(() => ApplyPreset("TODAY"))">Today</MudButton>
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "YEST" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" OnClick="@(() => ApplyPreset("YEST"))">Yesterday</MudButton>
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "WEEK" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" OnClick="@(() => ApplyPreset("WEEK"))">This Week</MudButton>
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "2W" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" OnClick="@(() => ApplyPreset("2W"))">Last 2 Weeks</MudButton>
+                <MudButton Size="Size.Small" Variant="@(_activePreset == "MONTH" ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Info" OnClick="@(() => ApplyPreset("MONTH"))">1 Month</MudButton>
+            </div>
+        </div>
+    </MudPaper>
+
+    <!-- 2. SEARCH BAR -->
+    <MudPaper Elevation="0" Class="pa-4 bento-card">
+        <MudGrid Spacing="2" AlignItems="Center">
+            <MudItem xs="12" sm="6" md="4">
+                <MudTextField T="string"
+                              @bind-Value="_hostname"
+                              Label="Machine Hostname"
+                              Placeholder="e.g. MOFZETS019 or MOKE..."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Immediate="true"
+                              OnKeyDown="HandleKeyDown"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Rounded.Computer"
+                              AdornmentColor="Color.Primary"
+                              Class="font-weight-bold text-uppercase" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Rounded.FindInPage"
+                           OnClick="OpenHostnameFinder">
+                    Find Hostname
+                </MudButton>
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudDatePicker Label="Start Date" @bind-Date="_startDate" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudDatePicker Label="End Date" @bind-Date="_endDate" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+            </MudItem>
+
+            <MudItem xs="12" sm="4" md="2" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Rounded.Search"
+                           OnClick="SearchAsync"
+                           Disabled="@(_isLoading || string.IsNullOrWhiteSpace(_hostname))">
+                    @(_isLoading ? "Loading..." : "Search")
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="rounded-xl">@_errorMessage</MudAlert>
+    }
+
+    @if (_isLoading)
+    {
+        <MudPaper Elevation="0" Class="pa-8 bento-card text-center">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" Class="mb-3" />
+            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Querying Station History for @_hostname.Trim().ToUpper()...</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Collecting records from correlations_trial and calculating reference totals</MudText>
+        </MudPaper>
+    }
+    else if (!_hasSearched)
+    {
+        <MudPaper Elevation="0" Class="pa-10 d-flex flex-column align-center justify-center rounded-xl border-2 border-dashed">
+            <MudAvatar Size="Size.Large" Color="Color.Primary" Variant="Variant.Outlined" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Rounded.DeveloperBoard" Size="Size.Large" />
+            </MudAvatar>
+            <MudText Typo="Typo.h6" Class="font-weight-bold">Enter a Machine Hostname to Begin</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center mt-1 mb-4" Style="max-width: 500px;">
+                Type a station Hostname above and pick a date range—or click <strong>Find Hostname</strong> to locate a machine by Travel Ticket, Harness S/N, or Customer / Project / Family / Line.
+            </MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Rounded.FindInPage" OnClick="OpenHostnameFinder">
+                Don't know the Hostname? Find it here
+            </MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <!-- 3. KPI CARDS -->
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Total Harnesses</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1">@_records.Count.ToString("N0")</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(0,102,204,0.12); color: #0066CC;">
+                            <MudIcon Icon="@Icons.Material.Rounded.Inventory2" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Station: <strong>@_resolvedSite</strong> • @_hostname.Trim().ToUpper()
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Unique References</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1" Color="Color.Success">@_refSummaries.Count</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(16,185,129,0.14); color: #10B981;">
+                            <MudIcon Icon="@Icons.Material.Rounded.QrCode2" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-truncate d-block">
+                        Top Ref: <strong>@(_refSummaries.FirstOrDefault() is { } top ? $"{top.Reference} ({top.SharePercent:0.0}%)" : "-")</strong>
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Reworked Units</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1" Color="Color.Warning">@_reworkedCount.ToString("N0")</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(245,158,11,0.14); color: #F59E0B;">
+                            <MudIcon Icon="@Icons.Material.Rounded.Build" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Rework Rate: <strong>@($"{(_records.Count > 0 ? _reworkedCount * 100.0 / _records.Count : 0):0.0}%")</strong>
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4 bento-card">
+                    <div class="d-flex justify-space-between align-start">
+                        <div>
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Peak Period Output</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold mt-1" Color="Color.Info">@_peakQty.ToString("N0")</MudText>
+                        </div>
+                        <div class="kpi-icon-box" style="background: rgba(59,130,246,0.14); color: #3B82F6;">
+                            <MudIcon Icon="@Icons.Material.Rounded.TrendingUp" />
+                        </div>
+                    </div>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Peak: <strong>@_peakLabel</strong></MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- 4. CHARTS WITH ALWAYS-VISIBLE DETAIL PILLS -->
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Station Output Trend</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Harnesses tested over selected period</MudText>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <div class="chart-toggle-group">
+                                <MudButton Size="Size.Small" Variant="@(_trendMode == "HOUR" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => { _trendMode = "HOUR"; BuildTrendChart(); })">By Hour</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_trendMode == "DAY" ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Secondary" OnClick="@(() => { _trendMode = "DAY"; BuildTrendChart(); })">By Day</MudButton>
+                            </div>
+                            <div class="chart-toggle-group">
+                                <MudButton Size="Size.Small" Variant="@(_trendChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _trendChartType = ChartType.Bar)">Bar</MudButton>
+                                <MudButton Size="Size.Small" Variant="@(_trendChartType == ChartType.Line ? Variant.Filled : Variant.Text)"
+                                           Color="Color.Primary" OnClick="@(() => _trendChartType = ChartType.Line)">Line</MudButton>
+                            </div>
+                        </div>
+                    </div>
+                    @if (_trendSeries.Count > 0 && _trendLabels.Length > 0)
+                    {
+                        <MudChart T="double" ChartType="@_trendChartType" ChartSeries="@_trendSeries" ChartLabels="@_trendLabels" Width="100%" Height="260px" />
+                        <div class="data-pill-strip">
+                            @foreach (var item in _trendItems)
+                            {
+                                <span class="data-pill">
+                                    <strong>@item.Label</strong>
+                                    <span>@item.Qty.ToString("N0")</span>
+                                    <span style="opacity: 0.65;">(@item.SharePercent.ToString("0.0")%)</span>
+                                </span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pa-8 text-center text-muted">No output data in selected range.</div>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="5">
+                <MudPaper Elevation="0" Class="pa-4 bento-card" Style="height: 100%;">
+                    <div class="d-flex flex-wrap justify-space-between align-center gap-2 mb-3">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Reference Share (%)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Top 10 references + Others</MudText>
+                        </div>
+                        <div class="chart-toggle-group">
+                            <MudButton Size="Size.Small" Variant="@(_refChartType == ChartType.Donut ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _refChartType = ChartType.Donut)">Donut</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_refChartType == ChartType.Pie ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _refChartType = ChartType.Pie)">Pie</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_refChartType == ChartType.Bar ? Variant.Filled : Variant.Text)"
+                                       Color="Color.Primary" OnClick="@(() => _refChartType = ChartType.Bar)">Bar</MudButton>
+                        </div>
+                    </div>
+                    @if (_refChartItems.Count > 0)
+                    {
+                        <div class="d-flex justify-center my-1">
+                            @if (_refChartType == ChartType.Bar)
+                            {
+                                <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_refBarSeries" ChartLabels="@_refShortLabels" Width="100%" Height="230px" />
+                            }
+                            else
+                            {
+                                <MudChart T="double" ChartType="@_refChartType" ChartSeries="@_refValues.AsChartDataSet()" ChartLabels="@_refChartLabels" Width="220px" Height="220px" />
+                            }
+                        </div>
+                        <div class="data-pill-strip">
+                            @for (int i = 0; i < _refChartItems.Count; i++)
+                            {
+                                var item = _refChartItems[i];
+                                <span class="data-pill">
+                                    <span class="data-pill-dot" style="@($"background: {GetPaletteColor(i)};")"></span>
+                                    <strong>@item.Label</strong>
+                                    <span>@item.Qty.ToString("N0")</span>
+                                    <span style="opacity: 0.7;">(@item.SharePercent.ToString("0.0")%)</span>
+                                </span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pa-8 text-center text-muted">No reference data found.</div>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- 5. EXPANDABLE TABLES (REFERENCE QUANTITY SUMMARY + FULL STATION HISTORY) -->
+        <MudExpansionPanels MultiExpansion="true" Elevation="1" Class="rounded-xl">
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Rounded.FormatListNumbered" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Quantity by Reference</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">@_refSummaries.Count</MudChip>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudDataGrid T="StationReferenceSummary" Items="@_refSummaries" Dense="true" Hover="true" Striped="true"
+                                 Filterable="true" FilterMode="DataGridFilterMode.ColumnFilterMenu" SortMode="SortMode.Multiple"
+                                 Class="compact-grid" Elevation="0">
+                        <ToolBarContent>
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Rounded.FileDownload" OnClick="ExportReferenceCsvAsync"
+                                       Disabled="@(_refSummaries.Count == 0)">
+                                Export Summary CSV
+                            </MudButton>
+                        </ToolBarContent>
+                        <Columns>
+                            <PropertyColumn Property="x => x.Reference" Title="Reference" />
+                            <PropertyColumn Property="x => x.TotalQty" Title="Total Qty" />
+                            <PropertyColumn Property="x => x.ReworkedQty" Title="Reworked" />
+                            <PropertyColumn Property="x => x.SharePercent" Title="Share (%)">
+                                <CellTemplate>
+                                    <div class="d-flex align-center gap-2" style="min-width: 120px;">
+                                        <MudProgressLinear Color="Color.Secondary" Value="@context.Item.SharePercent" Rounded="true" Size="Size.Small" Style="width: 65px;" />
+                                        <MudText Typo="Typo.caption" Class="font-weight-bold">@($"{context.Item.SharePercent:0.0}%")</MudText>
+                                    </div>
+                                </CellTemplate>
+                            </PropertyColumn>
+                        </Columns>
+                        <PagerContent>
+                            <MudDataGridPager T="StationReferenceSummary" />
+                        </PagerContent>
+                    </MudDataGrid>
+                </ChildContent>
+            </MudExpansionPanel>
+
+            <MudExpansionPanel Expanded="true">
+                <TitleContent>
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Rounded.History" Color="Color.Secondary" />
+                        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">Detailed Station History</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Filled">@_records.Count</MudChip>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudDataGrid T="TraceabilityRecord" Items="@_records" Dense="true" Hover="true" Striped="true"
+                                 Filterable="true" FilterMode="DataGridFilterMode.ColumnFilterMenu" Groupable="true"
+                                 SortMode="SortMode.Multiple" QuickFilter="@_historyQuickFilter" HorizontalScrollbar="true"
+                                 Class="compact-grid" Elevation="0">
+                        <ToolBarContent>
+                            <MudTextField @bind-Value="_historySearch" Placeholder="Search reference, label, ticket..."
+                                          Adornment="Adornment.Start" Immediate="true" AdornmentIcon="@Icons.Material.Rounded.Search"
+                                          Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width: 280px;" />
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Rounded.FileDownload" OnClick="ExportDetailsCsvAsync"
+                                       Disabled="@(_records.Count == 0)">
+                                Export Full CSV
+                            </MudButton>
+                        </ToolBarContent>
+                        <Columns>
+                            <PropertyColumn Property="x => x.Reference" Title="Reference" />
+                            <PropertyColumn Property="x => x.TravelTicketLabel" Title="Travel Ticket" />
+                            <PropertyColumn Property="x => x.Station" Title="Station" />
+                            <PropertyColumn Property="x => x.SecondLabel" Title="2nd Label" />
+                            @if (ShowThirdTicket)
+                            {
+                                <PropertyColumn Property="x => x.ThirdTravelTicketLabel" Title="3rd Travel Ticket" />
+                            }
+                            @if (ShowFourthTicket)
+                            {
+                                <PropertyColumn Property="x => x.FourthTravelTicketLabel" Title="4th Travel Ticket" />
+                            }
+                            <PropertyColumn Property="x => x.FinalLabel" Title="Final Label" />
+                            <PropertyColumn Property="x => x.TestDate" Title="Test Date" Format="dd-MM-yyyy HH:mm:ss" />
+                            <PropertyColumn Property="x => x.Reworked" Title="Reworked">
+                                <CellTemplate>
+                                    @if (IsReworked(context.Item.Reworked))
+                                    {
+                                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">@(context.Item.Reworked ?? "YES")</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">@(string.IsNullOrWhiteSpace(context.Item.Reworked) ? "NO" : context.Item.Reworked)</MudChip>
+                                    }
+                                </CellTemplate>
+                            </PropertyColumn>
+                            <PropertyColumn Property="x => x.ReworkId" Title="Rework ID" />
+                            <PropertyColumn Property="x => x.Hostname" Title="Hostname" />
+                        </Columns>
+                        <PagerContent>
+                            <MudDataGridPager T="TraceabilityRecord" />
+                        </PagerContent>
+                    </MudDataGrid>
+                </ChildContent>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    }
+</MudStack>
+
+<!-- DUAL-MODE HOSTNAME FINDER MODAL -->
+<MudDialog @bind-Visible="_showHostnameFinder" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Rounded.FindInPage" Color="Color.Primary" />
+            <MudText Typo="Typo.h6" Class="font-weight-bold">Find Machine Hostname</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Color="Color.Primary" PanelClass="pt-4">
+            <!-- TAB 1: By Harness S/N, Travel Ticket, or Reference (frmHostname) -->
+            <MudTabPanel Text="By Barcode / Ref" Icon="@Icons.Material.Rounded.QrCodeScanner">
+                <MudGrid Spacing="2" AlignItems="Center">
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" @bind-Value="_finderSite" Label="Site" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                            @foreach (var s in AvailableSites)
+                            {
+                                <MudSelectItem T="string" Value="@s">@s</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="8">
+                        <MudRadioGroup T="string" @bind-Value="_finderBarcodeMode" Class="d-flex gap-2">
+                            <MudRadio T="string" Value="@("SN")" Color="Color.Primary" Dense="true">Harness S/N</MudRadio>
+                            <MudRadio T="string" Value="@("TT")" Color="Color.Secondary" Dense="true">Travel Ticket</MudRadio>
+                            <MudRadio T="string" Value="@("REF")" Color="Color.Info" Dense="true">Reference</MudRadio>
+                        </MudRadioGroup>
+                    </MudItem>
+                    <MudItem xs="12" sm="9">
+                        <MudTextField T="string" @bind-Value="_finderBarcodeValue" Label="Enter Barcode or Reference"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" sm="3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                                   OnClick="SearchHostnamesByBarcodeAsync"
+                                   Disabled="@(_finderLoading || string.IsNullOrWhiteSpace(_finderSite) || string.IsNullOrWhiteSpace(_finderBarcodeValue))">
+                            Search
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+
+                @if (_finderLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+                }
+                else if (_barcodeHostResults.Count > 0)
+                {
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true" Class="mt-3">
+                        <thead>
+                            <tr>
+                                <th>Hostname</th>
+                                <th>Station</th>
+                                <th style="width: 110px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in _barcodeHostResults)
+                            {
+                                <tr>
+                                    <td><strong>@item.Hostname</strong></td>
+                                    <td>@item.Station</td>
+                                    <td>
+                                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                   OnClick="@(() => SelectFoundHostname(item.Hostname))">Use</MudButton>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudTabPanel>
+
+            <!-- TAB 2: By Customer / Project / Family / Line (NEW!) -->
+            <MudTabPanel Text="By Customer / Project / Family / Line" Icon="@Icons.Material.Rounded.AccountTree">
+                <MudGrid Spacing="2" AlignItems="Center">
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" Value="_bankFinderSite" ValueChanged="OnBankFinderSiteChangedAsync"
+                                   Label="Site" Placeholder="Select Site..." Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                            @foreach (var s in AvailableSites)
+                            {
+                                <MudSelectItem T="string" Value="@s">@s</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" Value="_fStation" ValueChanged="@(v => { _fStation = v; _fStation = "ALL"; _fCustomer = "ALL"; _fProject = "ALL"; _fFamily = "ALL"; _fLine = "ALL"; })"
+                                   Label="Station Type" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(_bankHostRows.Count == 0)">
+                            <MudSelectItem T="string" Value="@("ALL")">All Stations</MudSelectItem>
+                            @foreach (var st in FinderStations)
+                            {
+                                <MudSelectItem T="string" Value="@st">@st</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" Value="_fCustomer" ValueChanged="@(v => { _fCustomer = v; _fProject = "ALL"; _fFamily = "ALL"; _fLine = "ALL"; })"
+                                   Label="Customer" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(_bankHostRows.Count == 0)">
+                            <MudSelectItem T="string" Value="@("ALL")">All Customers</MudSelectItem>
+                            @foreach (var c in FinderCustomers)
+                            {
+                                <MudSelectItem T="string" Value="@c">@c</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" Value="_fProject" ValueChanged="@(v => { _fProject = v; _fFamily = "ALL"; _fLine = "ALL"; })"
+                                   Label="Project" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(_bankHostRows.Count == 0)">
+                            <MudSelectItem T="string" Value="@("ALL")">All Projects</MudSelectItem>
+                            @foreach (var p in FinderProjects)
+                            {
+                                <MudSelectItem T="string" Value="@p">@p</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" Value="_fFamily" ValueChanged="@(v => { _fFamily = v; _fLine = "ALL"; })"
+                                   Label="Family" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(_bankHostRows.Count == 0)">
+                            <MudSelectItem T="string" Value="@("ALL")">All Families</MudSelectItem>
+                            @foreach (var f in FinderFamilies)
+                            {
+                                <MudSelectItem T="string" Value="@f">@f</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" @bind-Value="_fLine"
+                                   Label="Line" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Disabled="@(_bankHostRows.Count == 0)">
+                            <MudSelectItem T="string" Value="@("ALL")">All Lines</MudSelectItem>
+                            @foreach (var l in FinderLines)
+                            {
+                                <MudSelectItem T="string" Value="@l">@l</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                </MudGrid>
+
+                @if (_bankFinderLoading)
+                {
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+                }
+                else if (FilteredBankHostnames.Count > 0)
+                {
+                    <div style="max-height: 280px; overflow-y: auto;" class="mt-3">
+                        <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                            <thead>
+                                <tr>
+                                    <th>Hostname</th>
+                                    <th>Customer / Project</th>
+                                    <th>Family</th>
+                                    <th>Line</th>
+                                    <th style="width: 90px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in FilteredBankHostnames)
+                                {
+                                    <tr>
+                                        <td><strong>@item.Hostname</strong></td>
+                                        <td>@item.Customer / @item.Project</td>
+                                        <td>@item.Family</td>
+                                        <td><MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@item.Line</MudChip></td>
+                                        <td>
+                                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                                       OnClick="@(() => SelectFoundHostname(item.Hostname))">Use</MudButton>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_bankFinderSite))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-3 d-block text-center">
+                        No station hostnames matched the selected filters.
+                    </MudText>
+                }
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showHostnameFinder = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly Dictionary<string, string> HostPrefixToSite = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "MOKE", "K1" },
+        { "MOAS", "K2" },
+        { "MOFZ", "MFZ" },
+        { "MOAA", "AA" },
+        { "MOSK", "Skirat" },
+        { "EGPS", "PortSaid" },
+        { "EGTR", "TenthRamadan" },
+        { "EGSO", "SixthOctober" },
+        { "ROAI", "Alba" },
+        { "RODV", "Deva" },
+        { "TNMO", "Monastir" }
+    };
+
+    private static readonly string[] Palette =
+    {
+        "#0066CC", "#10B981", "#F59E0B", "#8B5CF6", "#06B6D4",
+        "#EF4444", "#EC4899", "#14B8A6", "#6366F1", "#64748B"
+    };
+    private static string GetPaletteColor(int i) => Palette[i % Palette.Length];
+
+    private string _hostname = string.Empty;
+    private string _resolvedSite = string.Empty;
+    private DateTime? _startDate = DateTime.Today;
+    private DateTime? _endDate = DateTime.Today;
+    private string _activePreset = "TODAY";
+
+    private bool _isLoading = false;
+    private bool _hasSearched = false;
+    private string? _errorMessage;
+
+    private List<TraceabilityRecord> _records = new();
+    private List<StationReferenceSummary> _refSummaries = new();
+    private int _reworkedCount = 0;
+    private int _peakQty = 0;
+    private string _peakLabel = "-";
+    private string _historySearch = string.Empty;
+
+    private string _trendMode = "HOUR";
+    private ChartType _trendChartType = ChartType.Bar;
+    private List<ProductionBucketItem> _trendItems = new();
+    private List<ChartSeries<double>> _trendSeries = new();
+    private string[] _trendLabels = Array.Empty<string>();
+
+    private ChartType _refChartType = ChartType.Donut;
+    private List<ProductionBucketItem> _refChartItems = new();
+    private double[] _refValues = Array.Empty<double>();
+    private string[] _refChartLabels = Array.Empty<string>();
+    private string[] _refShortLabels = Array.Empty<string>();
+    private List<ChartSeries<double>> _refBarSeries = new();
+
+    // Hostname Finder Modal state
+    private bool _showHostnameFinder = false;
+    private bool _finderLoading = false;
+    private string _finderSite = string.Empty;
+    private string _finderBarcodeMode = "SN";
+    private string _finderBarcodeValue = string.Empty;
+    private List<HostnameLookupItem> _barcodeHostResults = new();
+
+    private bool _bankFinderLoading = false;
+    private string _bankFinderSite = string.Empty;
+    private List<HostnameLookupItem> _bankHostRows = new();
+    private string _fStation = "ALL", _fCustomer = "ALL", _fProject = "ALL", _fFamily = "ALL", _fLine = "ALL";
+
+    private List<string> AvailableSites => AppState.CurrentUser?.AccessibleSites ?? new List<string>();
+    private bool ShowThirdTicket => _records.Any(x => !string.IsNullOrWhiteSpace(x.ThirdTravelTicketLabel));
+    private bool ShowFourthTicket => _records.Any(x => !string.IsNullOrWhiteSpace(x.FourthTravelTicketLabel));
+
+    private List<string> FinderStations => _bankHostRows.Select(x => x.Station).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x).ToList();
+    private List<string> FinderCustomers => _bankHostRows.Where(x => _fStation == "ALL" || x.Station == _fStation).Select(x => x.Customer).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x).ToList();
+    private List<string> FinderProjects => _bankHostRows.Where(x => (_fStation == "ALL" || x.Station == _fStation) && (_fCustomer == "ALL" || x.Customer == _fCustomer)).Select(x => x.Project).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x).ToList();
+    private List<string> FinderFamilies => _bankHostRows.Where(x => (_fStation == "ALL" || x.Station == _fStation) && (_fCustomer == "ALL" || x.Customer == _fCustomer) && (_fProject == "ALL" || x.Project == _fProject)).Select(x => x.Family).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x).ToList();
+    private List<string> FinderLines => _bankHostRows.Where(x => (_fStation == "ALL" || x.Station == _fStation) && (_fCustomer == "ALL" || x.Customer == _fCustomer) && (_fProject == "ALL" || x.Project == _fProject) && (_fFamily == "ALL" || x.Family == _fFamily)).Select(x => x.Line).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().OrderBy(x => x).ToList();
+
+    private List<HostnameLookupItem> FilteredBankHostnames => _bankHostRows
+        .Where(x => (_fStation == "ALL" || x.Station == _fStation)
+                 && (_fCustomer == "ALL" || x.Customer == _fCustomer)
+                 && (_fProject == "ALL" || x.Project == _fProject)
+                 && (_fFamily == "ALL" || x.Family == _fFamily)
+                 && (_fLine == "ALL" || x.Line == _fLine))
+        .GroupBy(x => new { x.Hostname, x.Station, x.Customer, x.Project, x.Family, x.Line })
+        .Select(g => g.First())
+        .OrderBy(x => x.Hostname)
+        .ToList();
+
+    private Func<TraceabilityRecord, bool> _historyQuickFilter => x =>
+    {
+        if (string.IsNullOrWhiteSpace(_historySearch)) return true;
+        return (x.Reference?.Contains(_historySearch, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.TravelTicketLabel?.Contains(_historySearch, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.FinalLabel?.Contains(_historySearch, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (x.Station?.Contains(_historySearch, StringComparison.OrdinalIgnoreCase) ?? false);
+    };
+
+    protected override void OnInitialized()
+    {
+        AppState.OnChange += HandleStateChanged;
+        _finderSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+        var s = AppState.StationHistory;
+        if (s.HasSearched)
+        {
+            _hostname = s.Hostname;
+            _resolvedSite = s.ResolvedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _records = s.Records;
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+            ComputeSummaries();
+        }
+    }
+
+    private void HandleStateChanged()
+    {
+        if (string.IsNullOrWhiteSpace(_finderSite))
+            _finderSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+        var s = AppState.StationHistory;
+        if (s.HasSearched)
+        {
+            _hostname = s.Hostname;
+            _resolvedSite = s.ResolvedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _records = s.Records;
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+            ComputeSummaries();
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyPreset(string preset)
+    {
+        _activePreset = preset;
+        switch (preset)
+        {
+            case "TODAY":
+                _startDate = DateTime.Today; _endDate = DateTime.Today; _trendMode = "HOUR"; break;
+            case "YEST":
+                _startDate = DateTime.Today.AddDays(-1); _endDate = DateTime.Today.AddDays(-1); _trendMode = "HOUR"; break;
+            case "WEEK":
+                var diff = (7 + (DateTime.Today.DayOfWeek - DayOfWeek.Monday)) % 7;
+                _startDate = DateTime.Today.AddDays(-diff); _endDate = DateTime.Today; _trendMode = "DAY"; break;
+            case "2W":
+                _startDate = DateTime.Today.AddDays(-13); _endDate = DateTime.Today; _trendMode = "DAY"; break;
+            case "MONTH":
+                _startDate = DateTime.Today.AddDays(-29); _endDate = DateTime.Today; _trendMode = "DAY"; break;
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_hostname) && !_isLoading)
+            await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _errorMessage = null;
+        var host = _hostname.Trim().ToUpperInvariant();
+        if (host.Length < 4)
+        {
+            _errorMessage = "Hostname is too short. Please enter a valid Hostname (e.g. MOFZETS019).";
+            return;
+        }
+
+        var prefix = host[..4];
+        if (!HostPrefixToSite.TryGetValue(prefix, out var site))
+        {
+            _errorMessage = $"Unknown Hostname prefix '{prefix}'. Please verify the Hostname or use Find Hostname.";
+            return;
+        }
+
+        if (!AvailableSites.Contains(site, StringComparer.OrdinalIgnoreCase))
+        {
+            _errorMessage = $"Access denied: you do not have permission to query site '{site}'.";
+            return;
+        }
+
+        var start = (_startDate ?? DateTime.Today).Date;
+        var endExclusive = (_endDate ?? DateTime.Today).Date.AddDays(1);
+        if (start >= endExclusive)
+        {
+            _errorMessage = "Start Date must be earlier than or equal to End Date.";
+            return;
+        }
+        if ((endExclusive - start).TotalDays > 366)
+        {
+            _errorMessage = "Date range cannot exceed 365 days.";
+            return;
+        }
+
+        _resolvedSite = site;
+        _isLoading = true;
+        _hasSearched = false;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _records = await TraceabilityRepository.GetStationHistoryAsync(site, host, start, endExclusive);
+            ComputeSummaries();
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error retrieving station history: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ComputeSummaries()
+    {
+        _reworkedCount = _records.Count(r => IsReworked(r.Reworked));
+        var total = _records.Count;
+
+        _refSummaries = _records
+            .GroupBy(r => string.IsNullOrWhiteSpace(r.Reference) ? "Unknown" : r.Reference)
+            .Select(g => new StationReferenceSummary
+            {
+                Reference = g.Key,
+                TotalQty = g.Count(),
+                ReworkedQty = g.Count(x => IsReworked(x.Reworked)),
+                SharePercent = total > 0 ? Math.Round(g.Count() * 100.0 / total, 1) : 0
+            })
+            .OrderByDescending(x => x.TotalQty)
+            .ToList();
+
+        var topRefs = _refSummaries.Take(10).ToList();
+        var restRefs = _refSummaries.Skip(10).ToList();
+        _refChartItems = topRefs.Select(r => new ProductionBucketItem
+        {
+            Label = r.Reference,
+            Qty = r.TotalQty,
+            SharePercent = r.SharePercent
+        }).ToList();
+
+        if (restRefs.Count > 0)
+        {
+            var restQty = restRefs.Sum(x => x.TotalQty);
+            _refChartItems.Add(new ProductionBucketItem
+            {
+                Label = $"Others ({restRefs.Count})",
+                Qty = restQty,
+                SharePercent = total > 0 ? Math.Round(restQty * 100.0 / total, 1) : 0
+            });
+        }
+
+        _refValues = _refChartItems.Select(x => (double)x.Qty).ToArray();
+        _refShortLabels = _refChartItems.Select(x => x.Label).ToArray();
+        _refChartLabels = _refChartItems.Select(x => $"{x.Label} ({x.SharePercent:0.0}%)").ToArray();
+        _refBarSeries = _refValues.Length > 0
+            ? new List<ChartSeries<double>> { new() { Name = "Qty", Data = _refValues } }
+            : new();
+
+        BuildTrendChart();
+    }
+
+    private void BuildTrendChart()
+    {
+        var total = _records.Count;
+        if (_trendMode == "HOUR")
+        {
+            _trendItems = _records
+                .GroupBy(r => r.TestDate.Hour)
+                .OrderBy(g => g.Key)
+                .Select(g => new ProductionBucketItem
+                {
+                    Label = $"{g.Key:00}h",
+                    Qty = g.Count(),
+                    SharePercent = total > 0 ? Math.Round(g.Count() * 100.0 / total, 1) : 0
+                })
+                .ToList();
+        }
+        else
+        {
+            _trendItems = _records
+                .GroupBy(r => r.TestDate.Date)
+                .OrderBy(g => g.Key)
+                .Select(g => new ProductionBucketItem
+                {
+                    Label = g.Key.ToString("dd/MM"),
+                    Qty = g.Count(),
+                    SharePercent = total > 0 ? Math.Round(g.Count() * 100.0 / total, 1) : 0
+                })
+                .ToList();
+        }
+
+        var peak = _trendItems.OrderByDescending(x => x.Qty).FirstOrDefault();
+        _peakQty = peak?.Qty ?? 0;
+        _peakLabel = peak?.Label ?? "-";
+
+        _trendLabels = _trendItems.Select(x => x.Label).ToArray();
+        _trendSeries = _trendItems.Count > 0
+            ? new List<ChartSeries<double>> { new() { Name = "Harnesses", Data = _trendItems.Select(x => (double)x.Qty).ToArray() } }
+            : new();
+    }
+
+    private void OpenHostnameFinder()
+    {
+        if (string.IsNullOrWhiteSpace(_finderSite))
+            _finderSite = AvailableSites.FirstOrDefault() ?? string.Empty;
+        var s = AppState.StationHistory;
+        if (s.HasSearched)
+        {
+            _hostname = s.Hostname;
+            _resolvedSite = s.ResolvedSite;
+            _startDate = s.StartDate;
+            _endDate = s.EndDate;
+            _activePreset = s.ActivePreset;
+            _records = s.Records;
+            _hasSearched = true;
+            var st = AppState.StationHistory;
+            st.Hostname = _hostname;
+            st.ResolvedSite = _resolvedSite;
+            st.StartDate = _startDate;
+            st.EndDate = _endDate;
+            st.ActivePreset = _activePreset;
+            st.Records = _records;
+            st.HasSearched = true;
+            ComputeSummaries();
+        }
+        _showHostnameFinder = true;
+    }
+
+    private async Task SearchHostnamesByBarcodeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_finderSite) || !AvailableSites.Contains(_finderSite, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        _finderLoading = true;
+        _barcodeHostResults.Clear();
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _barcodeHostResults = await TraceabilityRepository.FindHostnamesByBarcodeAsync(_finderSite, _finderBarcodeMode, _finderBarcodeValue);
+            if (_barcodeHostResults.Count == 0)
+                Snackbar.Add("No hostnames found for this barcode/reference.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Lookup error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _finderLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnBankFinderSiteChangedAsync(string site)
+    {
+        if (!AvailableSites.Contains(site, StringComparer.OrdinalIgnoreCase))
+            return;
+
+        _bankFinderSite = site;
+        _fStation = "ALL"; _fCustomer = "ALL"; _fProject = "ALL"; _fFamily = "ALL"; _fLine = "ALL";
+        _bankFinderLoading = true;
+        _bankHostRows.Clear();
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _bankHostRows = await TraceabilityRepository.FindHostnamesBySiteBanksAsync(site);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading site machines: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _bankFinderLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void SelectFoundHostname(string selectedHost)
+    {
+        _hostname = selectedHost;
+        _showHostnameFinder = false;
+        Snackbar.Add($"Selected Hostname: {selectedHost}", Severity.Success);
+    }
+
+    private async Task ExportReferenceCsvAsync()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Reference,Total Qty,Reworked,Share (%)");
+        foreach (var r in _refSummaries)
+            sb.AppendLine($"\"{r.Reference}\",{r.TotalQty},{r.ReworkedQty},{r.SharePercent}");
+
+        var fileName = $"StationRefs_{_hostname.Trim().ToUpper()}_{(_startDate ?? DateTime.Today):yyyyMMdd}.csv";
+        await JS.InvokeVoidAsync("htDownloadCsv", fileName, sb.ToString());
+    }
+
+    private async Task ExportDetailsCsvAsync()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Reference,Travel Ticket,Station,2nd Label,Final Label,Test Date,Reworked,Rework ID,Hostname");
+        foreach (var r in _records)
+            sb.AppendLine($"\"{r.Reference}\",\"{r.TravelTicketLabel}\",\"{r.Station}\",\"{r.SecondLabel}\",\"{r.FinalLabel}\",\"{r.TestDate:dd-MM-yyyy HH:mm:ss}\",\"{r.Reworked}\",\"{r.ReworkId}\",\"{r.Hostname}\"");
+
+        var fileName = $"StationHistory_{_hostname.Trim().ToUpper()}_{(_startDate ?? DateTime.Today):yyyyMMdd}.csv";
+        await JS.InvokeVoidAsync("htDownloadCsv", fileName, sb.ToString());
+    }
+
+    private static bool IsReworked(object? val)
+    {
+        if (val is null) return false;
+        if (val is bool b) return b;
+        var s = val.ToString()?.Trim().ToUpperInvariant();
+        return s == "Y" || s == "YES" || s == "TRUE" || s == "1" || s == "OUI";
+    }
+
+    public void Dispose()
+    {
+        AppState.OnChange -= HandleStateChanged;
+    }
+}

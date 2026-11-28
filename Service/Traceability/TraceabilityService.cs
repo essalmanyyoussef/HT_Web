@@ -1,19 +1,30 @@
 using HT_Web.Models.Traceability;
 using HT_Web.Repositories;
+using Microsoft.Extensions.Logging;
 
 namespace HT_Web.Services.Traceability;
 
 public class TraceabilityService : ITraceabilityService
 {
     private readonly ITraceabilityRepository _repository;
- private readonly ILogger<TraceabilityService> _logger;
+    private readonly ILogger<TraceabilityService> _logger;
 
-    public TraceabilityService(ITraceabilityRepository repository)
+    public TraceabilityService(
+        ITraceabilityRepository repository,
+        ILogger<TraceabilityService> logger)
     {
         _repository = repository;
+        _logger = logger;
     }
 
     public async Task<TraceabilitySearchResult> SearchAsync(TraceabilitySearchRequest request)
+    {
+        var result = await SearchProcessHistoryAsync(request);
+        result.Errors = await SearchErrorsAsync(request, result.ProcessHistory, result.ErrorSearchKeys);
+        return result;
+    }
+
+    public async Task<TraceabilitySearchResult> SearchProcessHistoryAsync(TraceabilitySearchRequest request)
     {
         var result = new TraceabilitySearchResult();
         var searchKeys = new List<string>();
@@ -63,35 +74,46 @@ public class TraceabilityService : ITraceabilityService
             searchKeys.Add(request.SearchValue);
         }
 
-        // Deduplicate ET station (Host, TestDate) pairs to avoid redundant SQL calls
-        var distinctEtTargets = result.ProcessHistory
-            .Where(r => IsEtStation(r.Station) && !string.IsNullOrWhiteSpace(r.Hostname))
-            .Select(r => (Host: r.Hostname.Split('/')[0].Trim(), r.TestDate))
-            .Distinct()
-            .ToList();
-
-        // Run Family resolution and Error resolution in parallel
-        var familyTask = ResolveHarnessInformationAsync(
+        var distinctEtTargets = ExtractDistinctEtTargets(result.ProcessHistory);
+        result.HarnessInformation = await ResolveHarnessInformationAsync(
             request.Site,
             request.SearchValue,
             distinctEtTargets);
 
-        var errorsTask = request.IncludeAllErrors
-            ? GetEtDateRangeErrorsWithFallbackAsync(request.Site, distinctEtTargets, searchKeys)
-            : GetDirectErrorsByKeysAsync(request.Site, searchKeys);
-
-        await Task.WhenAll(familyTask, errorsTask);
-
-        result.HarnessInformation = await familyTask;
-        result.Errors = GroupErrorRecords(await errorsTask);
         result.ProcessHistory = GroupProcessHistory(result.ProcessHistory);
         result.ErrorSearchKeys = searchKeys;
+
+        return result;
+    }
+
+    public async Task<List<SolvedErrorRecord>> SearchErrorsAsync(
+        TraceabilitySearchRequest request,
+        List<TraceabilityRecord> processHistory,
+        List<string> searchKeys)
+    {
+        var distinctEtTargets = ExtractDistinctEtTargets(processHistory);
+        List<SolvedErrorRecord> rawErrors;
+
+        if (request.IncludeAllErrors && distinctEtTargets.Count > 0)
+        {
+            // Run ONLY the targeted ET date-window query (no redundant 900M-row fallback scan on PASS harnesses)
+            rawErrors = await GetEtDateRangeErrorsAsync(request.Site, distinctEtTargets);
+        }
+        else
+        {
+            // Single-scan WHERE Part IN @Keys instead of N sequential full table scans
+            DateTime? minDate = processHistory.Count > 0 ? processHistory.Min(x => x.TestDate).AddDays(-2) : null;
+            DateTime? maxDate = processHistory.Count > 0 ? processHistory.Max(x => x.TestDate).AddDays(1) : null;
+            rawErrors = await _repository.GetErrorsByKeysAsync(request.Site, searchKeys, minDate, maxDate);
+        }
+
+        var groupedErrors = GroupErrorRecords(rawErrors);
 
         try
         {
             var searchType = request.IsFinalLabel ? "Final Label" : "Travel Ticket";
             var user = string.IsNullOrWhiteSpace(request.Username) ? "Unknown" : request.Username;
-            var info = $"Steps: {result.ProcessHistory.Count}, Errors: {result.Errors.Count} - HT_Web";
+            var info = $"Steps: {processHistory.Count}, Errors: {groupedErrors.Count} - HT_Web";
 
             await _repository.LogTrackingAsync(
                 request.SearchValue,
@@ -101,37 +123,23 @@ public class TraceabilityService : ITraceabilityService
                 info,
                 searchType);
         }
-        catch
+        catch (Exception ex)
         {
-            // Keep search working even if tracking log fails
+            _logger.LogWarning(ex, "Failed to write tracking log for {SearchValue}", request.SearchValue);
         }
 
-        return result;
+        return groupedErrors;
     }
 
-    private async Task<List<SolvedErrorRecord>> GetEtDateRangeErrorsWithFallbackAsync(
-        string site,
-        List<(string Host, DateTime TestDate)> etTargets,
-        List<string> searchKeys)
+    private static List<(string Host, DateTime TestDate)> ExtractDistinctEtTargets(List<TraceabilityRecord> history)
     {
-        var etErrors = await GetEtDateRangeErrorsAsync(site, etTargets);
-        if (etErrors.Count > 0)
-            return etErrors;
-
-        return await GetDirectErrorsByKeysAsync(site, searchKeys);
-    }
-
-    private async Task<List<SolvedErrorRecord>> GetDirectErrorsByKeysAsync(string site, List<string> searchKeys)
-    {
-        foreach (var key in searchKeys.Distinct())
-        {
-            var errors = await _repository.GetErrorsAsync(site, key);
-            if (errors.Count > 0)
-            {
-                return errors;
-            }
-        }
-        return new List<SolvedErrorRecord>();
+        return history
+            .Where(r => IsEtStation(r.Station) && !string.IsNullOrWhiteSpace(r.Hostname))
+            .SelectMany(r => r.Hostname
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(h => (Host: h, r.TestDate)))
+            .Distinct()
+            .ToList();
     }
 
     private async Task<List<SolvedErrorRecord>> GetEtDateRangeErrorsAsync(

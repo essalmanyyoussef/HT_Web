@@ -53,4 +53,22 @@ public interface ITraceabilityRepository
         string site,
         DateTime startDate,
         DateTime endDate);
+    Task<List<TraceabilityRecord>> GetStationHistoryAsync(
+        string site,
+        string hostname,
+        DateTime startDate,
+        DateTime endDate);
+
+    Task<List<HostnameLookupItem>> FindHostnamesByBarcodeAsync(
+        string site,
+        string searchMode,
+        string searchValue);
+
+    Task<List<HostnameLookupItem>> FindHostnamesBySiteBanksAsync(
+        string site);
+    Task<List<SolvedErrorRecord>> GetErrorsByKeysAsync(
+        string site,
+        List<string> travelTickets,
+        DateTime? minDate = null,
+        DateTime? maxDate = null);
 }

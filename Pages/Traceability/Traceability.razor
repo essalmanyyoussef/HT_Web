@@ -213,13 +213,12 @@
                     <MudSelect T="string"
                                @bind-Value="SelectedSite"
                                Label="Site"
+                               Placeholder="Select Site..."
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense="true"
-                               AnchorOrigin="Origin.BottomCenter"
                                Adornment="Adornment.Start"
                                AdornmentIcon="@Icons.Material.Rounded.LocationOn"
-                               AdornmentColor="Color.Primary"
                                Disabled="@(AvailableSites.Count == 0)">
                         @foreach (var site in AvailableSites)
                         {
@@ -296,7 +295,7 @@
     @if (!IsLoading && _hasSearched)
     {
         <!-- Verdict Banner -->
-        <MudAlert Severity="@(Errors.Count == 0 ? Severity.Success : Severity.Error)"
+        <MudAlert Severity="@(_isLoadingErrors ? Severity.Info : (Errors.Count == 0 ? Severity.Success : Severity.Error))"
                   Variant="Variant.Filled"
                   Elevation="1"
                   Class="rounded-xl py-2">
@@ -305,10 +304,10 @@
                     <MudIcon Icon="@(Errors.Count == 0 ? Icons.Material.Rounded.CheckCircle : Icons.Material.Rounded.Warning)" Size="Size.Large" />
                     <div>
                         <MudText Typo="Typo.subtitle1" Class="font-weight-bold">
-                            @(Errors.Count == 0 ? "STATUS: CONFORMANT (PASS)" : $"STATUS: DEFECTS DETECTED ({Errors.Count} ERROR(S))")
+                            @(_isLoadingErrors ? "STATUS: CHECKING DEFECTS IN BACKGROUND..." : (Errors.Count == 0 ? "STATUS: CONFORMANT (PASS)" : $"STATUS: DEFECTS DETECTED ({Errors.Count} ERROR(S))"))
                         </MudText>
                         <MudText Typo="Typo.caption">
-                            @(Errors.Count == 0 ? "No active defects recorded for this harness." : "Defect detected during testing process.")
+                            @(_isLoadingErrors ? "Process history is ready below. Querying electrical test defects..." : (Errors.Count == 0 ? "No active defects recorded for this harness." : "Defect detected during testing process."))
                         </MudText>
                     </div>
                 </div>
@@ -522,7 +521,15 @@
                     </div>
                 </TitleContent>
                 <ChildContent>
-                    @if (Errors.Count == 0)
+                    @if (_isLoadingErrors)
+                    {
+                        <div class="pa-6 text-center">
+                            <MudProgressCircular Color="Color.Info" Indeterminate="true" Size="Size.Small" Class="mb-2" />
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">Searching electrical test & defect records...</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">You can already inspect Process History above while errors load.</MudText>
+                        </div>
+                    }
+                    else if (Errors.Count == 0)
                     {
                         <div class="pa-6 text-center text-muted">
                             <MudIcon Icon="@Icons.Material.Rounded.CheckCircleOutline" Color="Color.Success" Size="Size.Large" Class="mb-2" />
@@ -617,6 +624,7 @@
     private List<SolvedErrorRecord> Errors = new();
     private HarnessInformation? _harnessInfo;
     private bool IsLoading = false;
+    private bool _isLoadingErrors = false;
     private bool _hasSearched = false;
 
     private int _loadingStep = 1;
@@ -691,11 +699,29 @@
     {
         AppState.OnChange += HandleStateChanged;
         SyncSiteFromState();
+        // Restore previous tab-session search results if any
+        var s = AppState.Traceability;
+        SearchValue = s.SearchValue;
+        IsFinalLabel = s.IsFinalLabel;
+        IncludeAllErrors = s.IncludeAllErrors;
+        _hasSearched = s.HasSearched;
+        ProcessHistory = s.ProcessHistory;
+        Errors = s.Errors;
+        _harnessInfo = s.HarnessInfo;
     }
 
     private void HandleStateChanged()
     {
         SyncSiteFromState();
+        // Restore previous tab-session search results if any
+        var s = AppState.Traceability;
+        SearchValue = s.SearchValue;
+        IsFinalLabel = s.IsFinalLabel;
+        IncludeAllErrors = s.IncludeAllErrors;
+        _hasSearched = s.HasSearched;
+        ProcessHistory = s.ProcessHistory;
+        Errors = s.Errors;
+        _harnessInfo = s.HarnessInfo;
         InvokeAsync(StateHasChanged);
     }
 
@@ -769,21 +795,31 @@
                 Username = AppState.CurrentUser?.DisplayName ?? Environment.UserName
             };
 
-            var result = await TraceabilityService.SearchAsync(request);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var historyResult = await TraceabilityService.SearchProcessHistoryAsync(request);
             await cts.CancelAsync();
 
-            ProcessHistory = result.ProcessHistory ?? new();
-            Errors = result.Errors ?? new();
-            _harnessInfo = result.HarnessInformation;
+            ProcessHistory = historyResult.ProcessHistory ?? new();
+            _harnessInfo = historyResult.HarnessInformation;
             _hasSearched = true;
+            IsLoading = false;
+            _isLoadingErrors = true;
+            SaveTraceabilityState();
+            await InvokeAsync(StateHasChanged);
+
+            Snackbar.Add($"Process history loaded in {sw.Elapsed.TotalSeconds:0.1}s — checking defects in background...", Severity.Info);
+
+            Errors = await TraceabilityService.SearchErrorsAsync(request, ProcessHistory, historyResult.ErrorSearchKeys);
+            _isLoadingErrors = false;
+            SaveTraceabilityState();
 
             if (Errors.Count > 0)
             {
-                Snackbar.Add($"{Errors.Count} defect(s) detected on this harness!", Severity.Warning);
+                Snackbar.Add($"{Errors.Count} defect(s) detected ({sw.Elapsed.TotalSeconds:0.1}s total)", Severity.Warning);
             }
             else
             {
-                Snackbar.Add($"Harness conformant ({ProcessHistory.Count} process steps found)", Severity.Success);
+                Snackbar.Add($"Harness conformant ({ProcessHistory.Count} steps, {sw.Elapsed.TotalSeconds:0.1}s total)", Severity.Success);
             }
         }
         catch (Exception ex)
@@ -794,6 +830,7 @@
         finally
         {
             IsLoading = false;
+            _isLoadingErrors = false;
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -830,6 +867,7 @@
         _processSearchString = string.Empty;
         _errorSearchString = string.Empty;
         _hasSearched = false;
+        SaveTraceabilityState();
         _searchInput?.FocusAsync();
     }
 
@@ -896,6 +934,18 @@
 
         var url = $"/api/vision-report?hostname={Uri.EscapeDataString(record.Hostname ?? string.Empty)}&testDate={Uri.EscapeDataString(record.TestDate.ToString("O"))}";
         await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private void SaveTraceabilityState()
+    {
+        var s = AppState.Traceability;
+        s.SearchValue = SearchValue;
+        s.IsFinalLabel = IsFinalLabel;
+        s.IncludeAllErrors = IncludeAllErrors;
+        s.HasSearched = _hasSearched;
+        s.ProcessHistory = ProcessHistory;
+        s.Errors = Errors;
+        s.HarnessInfo = _harnessInfo;
     }
 
     public void Dispose()

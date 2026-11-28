@@ -9,6 +9,8 @@ public class TraceabilityRepository : ITraceabilityRepository
 {
     private readonly SqlConnectionFactory _connectionFactory;
 
+    private static DbString Ansi(string value) => new() { Value = value, IsAnsi = true, Length = Math.Max(value.Length, 255) };
+
     public TraceabilityRepository(
         SqlConnectionFactory connectionFactory)
     {
@@ -49,7 +51,7 @@ WHERE OUT_Barcode = @FinalLabel
                     sql,
                     new
                     {
-                        FinalLabel = finalLabel
+                        FinalLabel = Ansi(finalLabel)
                     },
                     commandTimeout: 300));
 
@@ -91,7 +93,7 @@ ORDER BY DateEnd ASC
                     sql,
                     new
                     {
-                        TravelTicket = travelTicket
+                        TravelTicket = Ansi(travelTicket)
                     },
                     commandTimeout: 300));
 
@@ -144,7 +146,7 @@ ORDER BY DateBegin DESC
                     sql,
                     new
                     {
-                        TravelTicket = travelTicket
+                        TravelTicket = Ansi(travelTicket)
                     },
                     commandTimeout: 300));
 
@@ -181,7 +183,7 @@ AND (
                     sql,
                     new
                     {
-                        TravelTicket = travelTicket
+                        TravelTicket = Ansi(travelTicket)
                     },
                     commandTimeout: 300));
 
@@ -205,7 +207,7 @@ AND (
         return await connection.QueryFirstOrDefaultAsync<string>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname, TestDate = testDate },
+                new { Hostname = Ansi(hostname), TestDate = testDate },
                 commandTimeout: 300));
     }
 
@@ -227,7 +229,7 @@ AND (
         var row = await connection.QueryFirstOrDefaultAsync<(DateTime DateBegin, DateTime DateEnd)?>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname, TestDate = testDate },
+                new { Hostname = Ansi(hostname), TestDate = testDate },
                 commandTimeout: 300));
 
         return row;
@@ -263,7 +265,8 @@ AND (
             FROM dbo.solvederrors WITH (NOLOCK)
             WHERE Hostname = @Hostname
               AND DateBegin BETWEEN @DateBegin AND @DateEnd
-            ORDER BY DateBegin DESC";
+            ORDER BY DateBegin DESC
+            OPTION (RECOMPILE)";
 
         using var connection = _connectionFactory.CreateConnection(site);
         await connection.OpenAsync();
@@ -271,7 +274,7 @@ AND (
         var result = await connection.QueryAsync<SolvedErrorRecord>(
             new CommandDefinition(
                 sql,
-                new { Hostname = hostname, DateBegin = dateBegin, DateEnd = dateEnd },
+                new { Hostname = Ansi(hostname), DateBegin = dateBegin, DateEnd = dateEnd },
                 commandTimeout: 300));
 
         return result.ToList();
@@ -474,6 +477,166 @@ WHERE rn = 1;";
         row.Customer = customerCode switch
         {
             "PSA" or "STL" => "STELLANTIS",
+            "TYT" or "TOY" or "TYTA" => "TOYOTA",
+            "SUZ" => "SUZUKI",
+            "RNLT" or "RENA" or "RSA" or "RNL" or "RNT" => "RENAULT",
+            "NIS" or "NISS" or "NSN" => "NISSAN",
+            _ => customerCode
+        };
+
+        if (core.Length >= 4 && core[^1].StartsWith("L", StringComparison.OrdinalIgnoreCase))
+        {
+            row.Project = core[1];
+            row.Family = string.Join("_", core[2..^1]);
+            row.Line = core[^1].ToUpperInvariant();
+        }
+        else if (core.Length == 3)
+        {
+            row.Project = core[1];
+            row.Family = core[2];
+            row.Line = "L1";
+        }
+        else if (core.Length == 2)
+        {
+            row.Project = core[1];
+            row.Family = "Standard";
+            row.Line = "L1";
+        }
+        else
+        {
+            row.Project = core.Length > 1 ? core[1] : "Other";
+            row.Family = string.Join("_", core.Skip(2));
+            row.Line = "L1";
+        }
+    }
+    public async Task<List<TraceabilityRecord>> GetStationHistoryAsync(
+        string site,
+        string hostname,
+        DateTime startDate,
+        DateTime endDate)
+    {
+        const string sql = @"
+SELECT
+    Ref             AS Reference,
+    BC              AS TravelTicketLabel,
+    Test            AS Station,
+    IN_Barcode_1    AS SecondLabel,
+    IN_Barcode_2    AS ThirdTravelTicketLabel,
+    IN_Barcode_3    AS FourthTravelTicketLabel,
+    OUT_Barcode     AS FinalLabel,
+    DateEnd         AS TestDate,
+    Rework          AS Reworked,
+    Rework_ID       AS ReworkId,
+    Hostname
+FROM correlations_trial WITH (NOLOCK)
+WHERE Hostname LIKE @Hostname
+  AND [DateEnd] >= @StartDate
+  AND [DateEnd] < @EndDate
+ORDER BY DateEnd DESC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<TraceabilityRecord>(
+            new CommandDefinition(
+                sql,
+                new { Hostname = Ansi(hostname.Trim()), StartDate = startDate, EndDate = endDate },
+                commandTimeout: 180));
+
+        return result.ToList();
+    }
+
+    public async Task<List<HostnameLookupItem>> FindHostnamesByBarcodeAsync(
+        string site,
+        string searchMode,
+        string searchValue)
+    {
+        var column = searchMode switch
+        {
+            "SN" => "OUT_Barcode",
+            "REF" => "Ref",
+            _ => "BC"
+        };
+
+        var sql = $@"
+SELECT DISTINCT
+    Hostname,
+    Test AS Station
+FROM correlations_trial WITH (NOLOCK)
+WHERE {column} = @SearchValue
+  AND Hostname IS NOT NULL
+ORDER BY Hostname ASC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<HostnameLookupItem>(
+            new CommandDefinition(
+                sql,
+                new { SearchValue = Ansi(searchValue.Trim()) },
+                commandTimeout: 120));
+
+        return result.ToList();
+    }
+
+    public async Task<List<HostnameLookupItem>> FindHostnamesBySiteBanksAsync(string site)
+    {
+        const string sql = @"
+SELECT DISTINCT
+    Hostname,
+    Bank
+FROM dbo.AggregatedCorrelations WITH (NOLOCK)
+WHERE [Date] >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+  AND [Bank] IS NOT NULL
+  AND [Bank] LIKE '%[_]%'
+ORDER BY Hostname ASC;";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var rows = (await connection.QueryAsync<HostnameLookupItem>(
+            new CommandDefinition(sql, commandTimeout: 120))).ToList();
+
+        foreach (var row in rows)
+        {
+            ParseBankWithStationType(row);
+        }
+
+        return rows;
+    }
+
+    private static void ParseBankWithStationType(HostnameLookupItem row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Bank))
+            return;
+
+        var parts = row.Bank.Split('_', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            row.Customer = row.Bank;
+            row.Project = "Other";
+            row.Family = row.Bank;
+            row.Line = "L1";
+            row.Station = "Other (OT)";
+            return;
+        }
+
+        var rawStation = parts[^1].Trim().ToUpperInvariant();
+        row.Station = rawStation switch
+        {
+            "ET" => "Electrical Test (ET)",
+            "CT" => "Clip Test (CT)",
+            "TM" => "Torque Machine (TM)",
+            "VT" => "Vision Test (VT)",
+            "OT" => "Other (OT)",
+            _ => parts[^1].Trim()
+        };
+
+        var core = parts[..^1];
+        var customerCode = core[0].ToUpperInvariant();
+        row.Customer = customerCode switch
+        {
+            "PSA" or "STL" => "STELLANTIS",
             "TYT" or "TOY" => "TOYOTA",
             "SUZ" => "SUZUKI",
             "RNLT" or "RENA" or "RSA" or "RNL" or "RNT" => "RENAULT",
@@ -505,5 +668,61 @@ WHERE rn = 1;";
             row.Family = string.Join("_", core.Skip(2));
             row.Line = "L1";
         }
+    }
+    public async Task<List<SolvedErrorRecord>> GetErrorsByKeysAsync(
+        string site,
+        List<string> travelTickets,
+        DateTime? minDate = null,
+        DateTime? maxDate = null)
+    {
+        var keys = travelTickets
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (keys.Count == 0)
+            return new List<SolvedErrorRecord>();
+
+        var dateClause = (minDate.HasValue && maxDate.HasValue)
+            ? "AND DateBegin BETWEEN @MinDate AND @MaxDate"
+            : string.Empty;
+
+        var sql = $@"
+SELECT
+    Ref             AS Reference,
+    Batch,
+    Part            AS TravelTicketLabel,
+    Worker          AS WorkerId,
+    Type            AS ErrorType,
+    Counterpart1    AS Tmp01,
+    Counterpart2    AS Tmp02,
+    Object,
+    Wire1,
+    Wire2,
+    Way,
+    DateBegin       AS StartDate,
+    DateEnd         AS EndDate,
+    TimeU,
+    CPV1,
+    CPV2,
+    CPV3,
+    CPV4,
+    Hostname
+FROM dbo.solvederrors WITH (NOLOCK)
+WHERE Part IN @Keys
+  {dateClause}
+ORDER BY DateBegin DESC
+OPTION (RECOMPILE);";
+
+        using var connection = _connectionFactory.CreateConnection(site);
+        await connection.OpenAsync();
+
+        var result = await connection.QueryAsync<SolvedErrorRecord>(
+            new CommandDefinition(
+                sql,
+                new { Keys = keys.Select(Ansi).ToList(), MinDate = minDate, MaxDate = maxDate },
+                commandTimeout: 300));
+
+        return result.ToList();
     }
 }

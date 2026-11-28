@@ -505,6 +505,29 @@
                 _selectedSite,
                 AvailableSites);
 
+            BindChartsFromStats();
+            var rs = AppState.Reports;
+            rs.StartDate = _startDate;
+            rs.EndDate = _endDate;
+            rs.ActivePreset = _activePreset;
+            rs.SelectedSite = _selectedSite;
+            rs.Stats = _stats;
+            rs.HasLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Could not load statistics: {ex.Message}";
+            Snackbar.Add(_errorMessage, Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void BindChartsFromStats()
+    {
             _dailyLabels = _stats.DailyStats.Select(d => d.Date.ToString("dd/MM")).ToArray();
             _dailySeries = _stats.DailyStats.Count > 0
                 ? new List<ChartSeries<double>>
@@ -533,17 +556,6 @@
                     new() { Name = "Searches / Hour", Data = fullHours.Select(x => x.Count).ToArray() }
                 }
                 : new();
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Could not load statistics: {ex.Message}";
-            Snackbar.Add(_errorMessage, Severity.Error);
-        }
-        finally
-        {
-            _isLoading = false;
-            await InvokeAsync(StateHasChanged);
-        }
     }
 
     public void Dispose()
