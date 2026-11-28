@@ -1,129 +1,122 @@
 @page "/employees"
 @using ET_Training.Data
 @using ET_Training.Models
+@using ET_Training.Components.Dialogs
 @inject TrainingRepository Repo
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
 
-<PageTitle>Employees</PageTitle>
-<MudText Typo="Typo.h5" Class="mb-3">Employees</MudText>
+<PageTitle>Employees - ET Training</PageTitle>
 
-<MudPaper Class="pa-4 mb-4">
-    <MudText Typo="Typo.subtitle1">@(_edit.ID_employe == 0 ? "New employee" : "Edit employee")</MudText>
-    <MudTextField @bind-Value="_edit.Name" Label="Name" MaxLength="50" />
-    <MudTextField @bind-Value="_edit.Username" Label="Username" MaxLength="50" />
-    <MudTextField @bind-Value="_edit.EmailAddress" Label="Email" MaxLength="100" />
-    <MudSelect T="int" @bind-Value="_edit.Id_site" Label="Site">
-        @foreach (var s in _sites)
-        {
-            <MudSelectItem T="int" Value="@s.Id_site">@s.SiteName</MudSelectItem>
-        }
-    </MudSelect>
-    <MudSelect T="int" @bind-Value="_edit.Id_Function" Label="Function">
-        @foreach (var f in _funcs)
-        {
-            <MudSelectItem T="int" Value="@f.Id_Function">@f.FunctionName</MudSelectItem>
-        }
-    </MudSelect>
-    <MudDatePicker @bind-Date="_hire" Label="Hire date" />
-    <MudDatePicker @bind-Date="_leave" Label="Leave date (optional)" />
-    <MudSwitch T="bool" @bind-Value="_edit.IsActive" Label="Active" Color="Color.Primary" />
-    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.ID_employe == 0 ? "Add" : "Update")</MudButton>
-    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <div class="mr-auto d-flex align-center">
+        <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
+        <div>
+            <MudText Typo="Typo.h5"><b>Employees</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@_items.Count employee(s), @_items.Count(e => e.IsActive) active</MudText>
+        </div>
+    </div>
+    <MudTextField @bind-Value="_search" Placeholder="Search name, username, site..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:280px" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="Add">New employee</MudButton>
+</div>
+
+<MudPaper Elevation="3" Class="rounded-lg">
+    <MudTable Items="Filtered" Hover="true" Striped="true" Dense="true" Loading="_loading" Elevation="0">
+        <HeaderContent>
+            <MudTh>Employee</MudTh>
+            <MudTh>Site</MudTh>
+            <MudTh>Function</MudTh>
+            <MudTh>Hired</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="width:110px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Employee">
+                <div class="d-flex align-center">
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" Class="mr-2">@Initials(context.Name)</MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.body2"><b>@context.Name</b></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Username@(string.IsNullOrEmpty(context.EmailAddress) ? "" : " · " + context.EmailAddress)</MudText>
+                    </div>
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Site">@context.SiteName</MudTd>
+            <MudTd DataLabel="Function">@context.FunctionName</MudTd>
+            <MudTd DataLabel="Hired">@context.Date_emp.ToString("yyyy-MM-dd")</MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Variant="Variant.Filled" Size="Size.Small">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">Left @(context.Date_Leave?.ToString("yyyy-MM-dd"))</MudChip>
+                }
+            </MudTd>
+            <MudTd>
+                <MudTooltip Text="Edit"><MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => Edit(context))" /></MudTooltip>
+                <MudTooltip Text="Delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" /></MudTooltip>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="pa-4">No employees found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
 </MudPaper>
-
-<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
-    <HeaderContent>
-        <MudTh>Id</MudTh><MudTh>Name</MudTh><MudTh>Username</MudTh><MudTh>Site</MudTh><MudTh>Function</MudTh>
-        <MudTh>Hired</MudTh><MudTh>Left</MudTh><MudTh>Active</MudTh><MudTh></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd>@context.ID_employe</MudTd>
-        <MudTd>@context.Name</MudTd>
-        <MudTd>@context.Username</MudTd>
-        <MudTd>@context.SiteName</MudTd>
-        <MudTd>@context.FunctionName</MudTd>
-        <MudTd>@context.Date_emp.ToString("yyyy-MM-dd")</MudTd>
-        <MudTd>@(context.Date_Leave?.ToString("yyyy-MM-dd"))</MudTd>
-        <MudTd>@(context.IsActive ? "Yes" : "No")</MudTd>
-        <MudTd>
-            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
-        </MudTd>
-    </RowTemplate>
-</MudTable>
 
 @code {
     private List<Employee> _items = new();
-    private List<Site> _sites = new();
-    private List<FunctionItem> _funcs = new();
-    private Employee _edit = new();
-    private DateTime? _hire = DateTime.Today;
-    private DateTime? _leave;
+    private string _search = "";
     private bool _loading = true;
 
+    private IEnumerable<Employee> Filtered => string.IsNullOrWhiteSpace(_search)
+        ? _items
+        : _items.Where(x => x.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                         || x.Username.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                         || (x.EmailAddress ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)
+                         || (x.SiteName ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)
+                         || (x.FunctionName ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase));
+
     protected override async Task OnInitializedAsync() => await Load();
+
+    private static string Initials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..Math.Min(2, parts[0].Length)].ToUpper(),
+            _ => ("" + parts[0][0] + parts[^1][0]).ToUpper()
+        };
+    }
 
     private async Task Load()
     {
         _loading = true;
-        try
-        {
-            _sites = await Repo.GetSites();
-            _funcs = await Repo.GetFunctions();
-            _items = await Repo.GetEmployees();
-        }
+        try { _items = await Repo.GetEmployees(); }
         catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
         _loading = false;
     }
 
-    private void Edit(Employee x)
-    {
-        _edit = new Employee
-        {
-            ID_employe = x.ID_employe, Name = x.Name, Id_site = x.Id_site, EmailAddress = x.EmailAddress,
-            Username = x.Username, Id_Function = x.Id_Function, IsActive = x.IsActive
-        };
-        _hire = x.Date_emp;
-        _leave = x.Date_Leave;
-    }
+    private async Task Add() => await OpenDialog(new Employee());
 
-    private void Cancel()
+    private async Task Edit(Employee x) => await OpenDialog(new Employee
     {
-        _edit = new Employee();
-        _hire = DateTime.Today;
-        _leave = null;
-    }
+        ID_employe = x.ID_employe, Name = x.Name, Username = x.Username, EmailAddress = x.EmailAddress,
+        Id_site = x.Id_site, Id_Function = x.Id_Function, Date_emp = x.Date_emp, Date_Leave = x.Date_Leave, IsActive = x.IsActive
+    });
 
-    private async Task Save()
+    private async Task OpenDialog(Employee item)
     {
-        if (string.IsNullOrWhiteSpace(_edit.Name) || string.IsNullOrWhiteSpace(_edit.Username)
-            || _edit.Id_site == 0 || _edit.Id_Function == 0 || _hire == null)
-        {
-            Snackbar.Add("Name, username, site, function and hire date are required.", Severity.Warning);
-            return;
-        }
-        if (_leave != null && _leave < _hire)
-        {
-            Snackbar.Add("Leave date cannot be before the hire date.", Severity.Warning);
-            return;
-        }
-        _edit.Date_emp = _hire.Value;
-        _edit.Date_Leave = _leave;
-        if (string.IsNullOrWhiteSpace(_edit.EmailAddress)) _edit.EmailAddress = null;
-        try
-        {
-            await Repo.SaveEmployee(_edit);
-            Snackbar.Add("Saved.", Severity.Success);
-            Cancel();
-            await Load();
-        }
-        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        var dlg = await Dialogs.ShowAsync<EmployeeDialog>(item.ID_employe == 0 ? "New employee" : "Edit employee",
+            new DialogParameters<EmployeeDialog> { { d => d.Item, item } });
+        var result = await dlg.Result;
+        if (result is { Canceled: false }) await Load();
     }
 
     private async Task Delete(Employee x)
     {
-        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete employee '{x.Name}'?", yesText: "Delete", cancelText: "Cancel");
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete employee", $"Delete '{x.Name}'?", yesText: "Delete", cancelText: "Cancel");
         if (ok != true) return;
         try
         {

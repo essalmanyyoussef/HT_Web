@@ -1,0 +1,50 @@
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.LocationCity" Color="Color.Primary" Class="mr-2" />
+            <MudText Typo="Typo.h6">@(Item.Id_site == 0 ? "New site" : "Edit site")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="Item.SiteName" Label="Site name" Required="true" RequiredError="Site name is required" MaxLength="100" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            <MudTextField @bind-Value="Item.Country" Label="Country" Required="true" RequiredError="Country is required" MaxLength="100" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="_saving">@(_saving ? "Saving..." : "Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Site Item { get; set; } = new();
+    private MudForm _form = default!;
+    private bool _saving;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+        _saving = true;
+        try
+        {
+            await Repo.SaveSite(Item);
+            Snackbar.Add("Saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error);
+        }
+        _saving = false;
+    }
+}

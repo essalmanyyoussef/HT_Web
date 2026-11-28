@@ -1,0 +1,66 @@
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Color="Color.Primary" Class="mr-2" />
+            <MudText Typo="Typo.h6">@(Item.ID_Course == 0 ? "New course" : "Edit course")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="Item.CourseName" Label="Course name" Required="true" RequiredError="Course name is required" MaxLength="150" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+            <MudSelect T="int" @bind-Value="Item.Id_Category" Label="Category" Required="true" RequiredError="Pick a category" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var c in _categories)
+                {
+                    <MudSelectItem T="int" Value="@c.Id_Category">@c.CategoryName</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="_saving">@(_saving ? "Saving..." : "Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Course Item { get; set; } = new();
+    private MudForm _form = default!;
+    private bool _saving;
+    private List<Category> _categories = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _categories = await Repo.GetCategories(); }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid || Item.Id_Category == 0)
+        {
+            if (Item.Id_Category == 0) Snackbar.Add("Pick a category.", Severity.Warning);
+            return;
+        }
+        _saving = true;
+        try
+        {
+            await Repo.SaveCourse(Item);
+            Snackbar.Add("Saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error);
+        }
+        _saving = false;
+    }
+}

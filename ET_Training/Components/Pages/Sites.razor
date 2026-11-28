@@ -1,40 +1,55 @@
 @page "/sites"
 @using ET_Training.Data
 @using ET_Training.Models
+@using ET_Training.Components.Dialogs
 @inject TrainingRepository Repo
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
 
-<PageTitle>Sites</PageTitle>
-<MudText Typo="Typo.h5" Class="mb-3">Sites</MudText>
+<PageTitle>Sites - ET Training</PageTitle>
 
-<MudPaper Class="pa-4 mb-4">
-    <MudText Typo="Typo.subtitle1">@(_edit.Id_site == 0 ? "New site" : "Edit site")</MudText>
-    <MudTextField @bind-Value="_edit.SiteName" Label="Site name" MaxLength="50" />
-    <MudTextField @bind-Value="_edit.Country" Label="Country" MaxLength="50" />
-    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.Id_site == 0 ? "Add" : "Update")</MudButton>
-    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <div class="mr-auto d-flex align-center">
+        <MudIcon Icon="@Icons.Material.Filled.LocationCity" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
+        <div>
+            <MudText Typo="Typo.h5"><b>Sites</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@_items.Count site(s)</MudText>
+        </div>
+    </div>
+    <MudTextField @bind-Value="_search" Placeholder="Search..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:240px" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="Add">New site</MudButton>
+</div>
+
+<MudPaper Elevation="3" Class="rounded-lg">
+    <MudTable Items="Filtered" Hover="true" Striped="true" Dense="true" Loading="_loading" Elevation="0">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Country</MudTh>
+            <MudTh Style="width:110px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name"><b>@context.SiteName</b></MudTd>
+            <MudTd DataLabel="Country">@context.Country</MudTd>
+            <MudTd>
+                <MudTooltip Text="Edit"><MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => Edit(context))" /></MudTooltip>
+                <MudTooltip Text="Delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" /></MudTooltip>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="pa-4">No sites found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
 </MudPaper>
-
-<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
-    <HeaderContent>
-        <MudTh>Id</MudTh><MudTh>Site</MudTh><MudTh>Country</MudTh><MudTh></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd>@context.Id_site</MudTd>
-        <MudTd>@context.SiteName</MudTd>
-        <MudTd>@context.Country</MudTd>
-        <MudTd>
-            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
-        </MudTd>
-    </RowTemplate>
-</MudTable>
 
 @code {
     private List<Site> _items = new();
-    private Site _edit = new();
+    private string _search = "";
     private bool _loading = true;
+
+    private IEnumerable<Site> Filtered => string.IsNullOrWhiteSpace(_search)
+        ? _items
+        : _items.Where(x => x.SiteName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                         || x.Country.Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -46,29 +61,21 @@
         _loading = false;
     }
 
-    private void Edit(Site x) => _edit = new Site { Id_site = x.Id_site, SiteName = x.SiteName, Country = x.Country };
-    private void Cancel() => _edit = new Site();
+    private async Task Add() => await OpenDialog(new Site());
 
-    private async Task Save()
+    private async Task Edit(Site x) => await OpenDialog(new Site { Id_site = x.Id_site, SiteName = x.SiteName, Country = x.Country });
+
+    private async Task OpenDialog(Site item)
     {
-        if (string.IsNullOrWhiteSpace(_edit.SiteName) || string.IsNullOrWhiteSpace(_edit.Country))
-        {
-            Snackbar.Add("Site name and country are required.", Severity.Warning);
-            return;
-        }
-        try
-        {
-            await Repo.SaveSite(_edit);
-            Snackbar.Add("Saved.", Severity.Success);
-            _edit = new Site();
-            await Load();
-        }
-        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        var dlg = await Dialogs.ShowAsync<SiteDialog>(item.Id_site == 0 ? "New site" : "Edit site",
+            new DialogParameters<SiteDialog> { { d => d.Item, item } });
+        var result = await dlg.Result;
+        if (result is { Canceled: false }) await Load();
     }
 
     private async Task Delete(Site x)
     {
-        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete site '{x.SiteName}'?", yesText: "Delete", cancelText: "Cancel");
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete site", $"Delete '{x.SiteName}'? This fails if employees are linked to it.", yesText: "Delete", cancelText: "Cancel");
         if (ok != true) return;
         try
         {

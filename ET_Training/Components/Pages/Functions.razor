@@ -1,38 +1,52 @@
 @page "/functions"
 @using ET_Training.Data
 @using ET_Training.Models
+@using ET_Training.Components.Dialogs
 @inject TrainingRepository Repo
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
 
-<PageTitle>Functions</PageTitle>
-<MudText Typo="Typo.h5" Class="mb-3">Functions</MudText>
+<PageTitle>Functions - ET Training</PageTitle>
 
-<MudPaper Class="pa-4 mb-4">
-    <MudText Typo="Typo.subtitle1">@(_edit.Id_Function == 0 ? "New function" : "Edit function")</MudText>
-    <MudTextField @bind-Value="_edit.FunctionName" Label="Function name" MaxLength="50" />
-    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.Id_Function == 0 ? "Add" : "Update")</MudButton>
-    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <div class="mr-auto d-flex align-center">
+        <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
+        <div>
+            <MudText Typo="Typo.h5"><b>Functions</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@_items.Count function(s)</MudText>
+        </div>
+    </div>
+    <MudTextField @bind-Value="_search" Placeholder="Search..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:240px" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="Add">New function</MudButton>
+</div>
+
+<MudPaper Elevation="3" Class="rounded-lg">
+    <MudTable Items="Filtered" Hover="true" Striped="true" Dense="true" Loading="_loading" Elevation="0">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh Style="width:110px"></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name"><b>@context.FunctionName</b></MudTd>
+            <MudTd>
+                <MudTooltip Text="Edit"><MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => Edit(context))" /></MudTooltip>
+                <MudTooltip Text="Delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" /></MudTooltip>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="pa-4">No functions found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
 </MudPaper>
-
-<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
-    <HeaderContent>
-        <MudTh>Id</MudTh><MudTh>Function</MudTh><MudTh></MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd>@context.Id_Function</MudTd>
-        <MudTd>@context.FunctionName</MudTd>
-        <MudTd>
-            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
-            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
-        </MudTd>
-    </RowTemplate>
-</MudTable>
 
 @code {
     private List<FunctionItem> _items = new();
-    private FunctionItem _edit = new();
+    private string _search = "";
     private bool _loading = true;
+
+    private IEnumerable<FunctionItem> Filtered => string.IsNullOrWhiteSpace(_search)
+        ? _items
+        : _items.Where(x => x.FunctionName.Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync() => await Load();
 
@@ -44,29 +58,21 @@
         _loading = false;
     }
 
-    private void Edit(FunctionItem x) => _edit = new FunctionItem { Id_Function = x.Id_Function, FunctionName = x.FunctionName };
-    private void Cancel() => _edit = new FunctionItem();
+    private async Task Add() => await OpenDialog(new FunctionItem());
 
-    private async Task Save()
+    private async Task Edit(FunctionItem x) => await OpenDialog(new FunctionItem { Id_Function = x.Id_Function, FunctionName = x.FunctionName });
+
+    private async Task OpenDialog(FunctionItem item)
     {
-        if (string.IsNullOrWhiteSpace(_edit.FunctionName))
-        {
-            Snackbar.Add("Function name is required.", Severity.Warning);
-            return;
-        }
-        try
-        {
-            await Repo.SaveFunction(_edit);
-            Snackbar.Add("Saved.", Severity.Success);
-            _edit = new FunctionItem();
-            await Load();
-        }
-        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        var dlg = await Dialogs.ShowAsync<FunctionDialog>(item.Id_Function == 0 ? "New function" : "Edit function",
+            new DialogParameters<FunctionDialog> { { d => d.Item, item } });
+        var result = await dlg.Result;
+        if (result is { Canceled: false }) await Load();
     }
 
     private async Task Delete(FunctionItem x)
     {
-        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete function '{x.FunctionName}'?", yesText: "Delete", cancelText: "Cancel");
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete function", $"Delete '{x.FunctionName}'? This fails if employees are linked to it.", yesText: "Delete", cancelText: "Cancel");
         if (ok != true) return;
         try
         {

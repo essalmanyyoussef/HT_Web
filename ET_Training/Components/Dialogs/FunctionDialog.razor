@@ -1,0 +1,49 @@
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.WorkOutline" Color="Color.Primary" Class="mr-2" />
+            <MudText Typo="Typo.h6">@(Item.Id_Function == 0 ? "New function" : "Edit function")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="Item.FunctionName" Label="Function name" Required="true" RequiredError="Function name is required" MaxLength="100" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="_saving">@(_saving ? "Saving..." : "Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public FunctionItem Item { get; set; } = new();
+    private MudForm _form = default!;
+    private bool _saving;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+        _saving = true;
+        try
+        {
+            await Repo.SaveFunction(Item);
+            Snackbar.Add("Saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error);
+        }
+        _saving = false;
+    }
+}

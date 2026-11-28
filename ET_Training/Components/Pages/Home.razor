@@ -1,5 +1,159 @@
 @page "/"
+@using ET_Training.Data
+@inject TrainingRepository Repo
 
-<PageTitle>ET training</PageTitle>
-<MudText Typo="Typo.h4" Class="mb-4">ET training</MudText>
-<MudText>Use the menu: Sites, Functions and Categories first, then Courses and Employees.</MudText>
+<PageTitle>Dashboard - ET Training</PageTitle>
+
+<div class="d-flex align-center mb-6">
+    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large" Class="mr-3">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" />
+    </MudAvatar>
+    <div>
+        <MudText Typo="Typo.h4"><b>Dashboard</b></MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Employee training at a glance</MudText>
+    </div>
+</div>
+
+@if (_error)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4">
+        Cannot reach the database. Check the connection string in appsettings.json.
+    </MudAlert>
+}
+
+<MudGrid Class="mb-6">
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard Elevation="3" Class="rounded-lg">
+            <MudCardContent>
+                <div class="d-flex align-center justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">EMPLOYEES</MudText>
+                        <MudText Typo="Typo.h3"><b>@Show(_employees)</b></MudText>
+                    </div>
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.People" />
+                    </MudAvatar>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/employees" Variant="Variant.Text" Color="Color.Primary" EndIcon="@Icons.Material.Filled.ArrowForward">Manage</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard Elevation="3" Class="rounded-lg">
+            <MudCardContent>
+                <div class="d-flex align-center justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">ACTIVE</MudText>
+                        <MudText Typo="Typo.h3"><b>@Show(_active)</b></MudText>
+                    </div>
+                    <MudAvatar Color="Color.Success" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                    </MudAvatar>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/employees" Variant="Variant.Text" Color="Color.Success" EndIcon="@Icons.Material.Filled.ArrowForward">View</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudCard Elevation="3" Class="rounded-lg">
+            <MudCardContent>
+                <div class="d-flex align-center justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">COURSES</MudText>
+                        <MudText Typo="Typo.h3"><b>@Show(_courses)</b></MudText>
+                    </div>
+                    <MudAvatar Color="Color.Secondary" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.MenuBook" />
+                    </MudAvatar>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/courses" Variant="Variant.Text" Color="Color.Secondary" EndIcon="@Icons.Material.Filled.ArrowForward">Manage</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="4" md="4">
+        <MudCard Elevation="3" Class="rounded-lg">
+            <MudCardContent>
+                <div class="d-flex align-center justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">SITES</MudText>
+                        <MudText Typo="Typo.h3"><b>@Show(_sites)</b></MudText>
+                    </div>
+                    <MudAvatar Color="Color.Tertiary" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.LocationCity" />
+                    </MudAvatar>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/sites" Variant="Variant.Text" Color="Color.Tertiary" EndIcon="@Icons.Material.Filled.ArrowForward">Manage</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="4" md="4">
+        <MudCard Elevation="3" Class="rounded-lg">
+            <MudCardContent>
+                <div class="d-flex align-center justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">FUNCTIONS</MudText>
+                        <MudText Typo="Typo.h3"><b>@Show(_functions)</b></MudText>
+                    </div>
+                    <MudAvatar Color="Color.Warning" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.WorkOutline" />
+                    </MudAvatar>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/functions" Variant="Variant.Text" Color="Color.Warning" EndIcon="@Icons.Material.Filled.ArrowForward">Manage</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="4" md="4">
+        <MudCard Elevation="3" Class="rounded-lg">
+            <MudCardContent>
+                <div class="d-flex align-center justify-space-between">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">CATEGORIES</MudText>
+                        <MudText Typo="Typo.h3"><b>@Show(_categories)</b></MudText>
+                    </div>
+                    <MudAvatar Color="Color.Info" Variant="Variant.Filled" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.Category" />
+                    </MudAvatar>
+                </div>
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Href="/categories" Variant="Variant.Text" Color="Color.Info" EndIcon="@Icons.Material.Filled.ArrowForward">Manage</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lightbulb">
+    Tip: add Sites, Functions and Categories first, then Courses and Employees.
+</MudAlert>
+
+@code {
+    private int? _employees, _active, _courses, _sites, _functions, _categories;
+    private bool _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var emps = await Repo.GetEmployees();
+            _employees = emps.Count;
+            _active = emps.Count(e => e.IsActive);
+            _courses = (await Repo.GetCourses()).Count;
+            _sites = (await Repo.GetSites()).Count;
+            _functions = (await Repo.GetFunctions()).Count;
+            _categories = (await Repo.GetCategories()).Count;
+        }
+        catch { _error = true; }
+    }
+
+    private static string Show(int? v) => v?.ToString() ?? "-";
+}

@@ -1,0 +1,120 @@
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" Class="mr-2" />
+            <MudText Typo="Typo.h6">@(Item.ID_employe == 0 ? "New employee" : "Edit employee")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Item.Name" Label="Full name" Required="true" RequiredError="Name is required" MaxLength="50" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="Item.Username" Label="Username" Required="true" RequiredError="Username is required" MaxLength="50" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="Item.EmailAddress" Label="Email (optional)" MaxLength="100" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Validation="@(new Func<string?, string?>(ValidateEmail))" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int" @bind-Value="Item.Id_site" Label="Site" Required="true" RequiredError="Pick a site" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var s in _sites)
+                        {
+                            <MudSelectItem T="int" Value="@s.Id_site">@s.SiteName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int" @bind-Value="Item.Id_Function" Label="Function" Required="true" RequiredError="Pick a function" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var f in _funcs)
+                        {
+                            <MudSelectItem T="int" Value="@f.Id_Function">@f.FunctionName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_hire" Label="Hire date" Required="true" RequiredError="Hire date is required" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="yyyy-MM-dd" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_leave" Label="Leave date (optional)" Variant="Variant.Outlined" Margin="Margin.Dense" DateFormat="yyyy-MM-dd" Clearable="true" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch T="bool" @bind-Value="Item.IsActive" Label="Active" Color="Color.Success" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save" Disabled="_saving">@(_saving ? "Saving..." : "Save")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Employee Item { get; set; } = new();
+    private MudForm _form = default!;
+    private bool _saving;
+    private List<Site> _sites = new();
+    private List<FunctionItem> _funcs = new();
+    private DateTime? _hire;
+    private DateTime? _leave;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hire = Item.ID_employe == 0 ? DateTime.Today : Item.Date_emp;
+        _leave = Item.Date_Leave;
+        try
+        {
+            _sites = await Repo.GetSites();
+            _funcs = await Repo.GetFunctions();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private static string? ValidateEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return System.Text.RegularExpressions.Regex.IsMatch(value, @"^[^@\s]+@[^@\s]+\.[^@\s]+$") ? null : "Invalid email address";
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+        if (Item.Id_site == 0 || Item.Id_Function == 0 || _hire == null)
+        {
+            Snackbar.Add("Site, function and hire date are required.", Severity.Warning);
+            return;
+        }
+        if (_leave != null && _leave < _hire)
+        {
+            Snackbar.Add("Leave date cannot be before the hire date.", Severity.Warning);
+            return;
+        }
+        Item.Date_emp = _hire.Value;
+        Item.Date_Leave = _leave;
+        if (string.IsNullOrWhiteSpace(Item.EmailAddress)) Item.EmailAddress = null;
+        _saving = true;
+        try
+        {
+            await Repo.SaveEmployee(Item);
+            Snackbar.Add("Saved.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error);
+        }
+        _saving = false;
+    }
+}
