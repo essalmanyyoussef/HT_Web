@@ -1,0 +1,81 @@
+@page "/sites"
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Sites</PageTitle>
+<MudText Typo="Typo.h5" Class="mb-3">Sites</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.subtitle1">@(_edit.Id_site == 0 ? "New site" : "Edit site")</MudText>
+    <MudTextField @bind-Value="_edit.SiteName" Label="Site name" MaxLength="50" />
+    <MudTextField @bind-Value="_edit.Country" Label="Country" MaxLength="50" />
+    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.Id_site == 0 ? "Add" : "Update")</MudButton>
+    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+</MudPaper>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Id</MudTh><MudTh>Site</MudTh><MudTh>Country</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id_site</MudTd>
+        <MudTd>@context.SiteName</MudTd>
+        <MudTd>@context.Country</MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Site> _items = new();
+    private Site _edit = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _items = await Repo.GetSites(); }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        _loading = false;
+    }
+
+    private void Edit(Site x) => _edit = new Site { Id_site = x.Id_site, SiteName = x.SiteName, Country = x.Country };
+    private void Cancel() => _edit = new Site();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.SiteName) || string.IsNullOrWhiteSpace(_edit.Country))
+        {
+            Snackbar.Add("Site name and country are required.", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await Repo.SaveSite(_edit);
+            Snackbar.Add("Saved.", Severity.Success);
+            _edit = new Site();
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private async Task Delete(Site x)
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete site '{x.SiteName}'?", yesText: "Delete", cancelText: "Cancel");
+        if (ok != true) return;
+        try
+        {
+            await Repo.DeleteSite(x.Id_site);
+            Snackbar.Add("Deleted.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+}

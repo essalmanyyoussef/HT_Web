@@ -1,4 +1,5 @@
-﻿using ET_Training.Components;
+using ET_Training.Components;
+using ET_Training.Data;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
+builder.Services.AddScoped<TrainingRepository>();
 
 var app = builder.Build();
 

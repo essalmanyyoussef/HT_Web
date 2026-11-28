@@ -1,0 +1,79 @@
+@page "/functions"
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Functions</PageTitle>
+<MudText Typo="Typo.h5" Class="mb-3">Functions</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.subtitle1">@(_edit.Id_Function == 0 ? "New function" : "Edit function")</MudText>
+    <MudTextField @bind-Value="_edit.FunctionName" Label="Function name" MaxLength="50" />
+    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.Id_Function == 0 ? "Add" : "Update")</MudButton>
+    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+</MudPaper>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Id</MudTh><MudTh>Function</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id_Function</MudTd>
+        <MudTd>@context.FunctionName</MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<FunctionItem> _items = new();
+    private FunctionItem _edit = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _items = await Repo.GetFunctions(); }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        _loading = false;
+    }
+
+    private void Edit(FunctionItem x) => _edit = new FunctionItem { Id_Function = x.Id_Function, FunctionName = x.FunctionName };
+    private void Cancel() => _edit = new FunctionItem();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.FunctionName))
+        {
+            Snackbar.Add("Function name is required.", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await Repo.SaveFunction(_edit);
+            Snackbar.Add("Saved.", Severity.Success);
+            _edit = new FunctionItem();
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private async Task Delete(FunctionItem x)
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete function '{x.FunctionName}'?", yesText: "Delete", cancelText: "Cancel");
+        if (ok != true) return;
+        try
+        {
+            await Repo.DeleteFunction(x.Id_Function);
+            Snackbar.Add("Deleted.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+}

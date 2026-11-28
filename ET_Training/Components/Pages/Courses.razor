@@ -1,0 +1,91 @@
+@page "/courses"
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Courses</PageTitle>
+<MudText Typo="Typo.h5" Class="mb-3">Courses</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.subtitle1">@(_edit.ID_Course == 0 ? "New course" : "Edit course")</MudText>
+    <MudTextField @bind-Value="_edit.CourseName" Label="Course name" MaxLength="50" />
+    <MudSelect T="int" @bind-Value="_edit.Id_Category" Label="Category">
+        @foreach (var c in _cats)
+        {
+            <MudSelectItem T="int" Value="@c.Id_Category">@c.CategoryName</MudSelectItem>
+        }
+    </MudSelect>
+    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.ID_Course == 0 ? "Add" : "Update")</MudButton>
+    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+</MudPaper>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Id</MudTh><MudTh>Course</MudTh><MudTh>Category</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.ID_Course</MudTd>
+        <MudTd>@context.CourseName</MudTd>
+        <MudTd>@context.CategoryName</MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Course> _items = new();
+    private List<Category> _cats = new();
+    private Course _edit = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try
+        {
+            _cats = await Repo.GetCategories();
+            _items = await Repo.GetCourses();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        _loading = false;
+    }
+
+    private void Edit(Course x) => _edit = new Course { ID_Course = x.ID_Course, CourseName = x.CourseName, Id_Category = x.Id_Category };
+    private void Cancel() => _edit = new Course();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.CourseName) || _edit.Id_Category == 0)
+        {
+            Snackbar.Add("Course name and category are required.", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await Repo.SaveCourse(_edit);
+            Snackbar.Add("Saved.", Severity.Success);
+            _edit = new Course();
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private async Task Delete(Course x)
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete course '{x.CourseName}'?", yesText: "Delete", cancelText: "Cancel");
+        if (ok != true) return;
+        try
+        {
+            await Repo.DeleteCourse(x.ID_Course);
+            Snackbar.Add("Deleted.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+}

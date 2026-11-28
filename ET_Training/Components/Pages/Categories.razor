@@ -1,0 +1,79 @@
+@page "/categories"
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Categories</PageTitle>
+<MudText Typo="Typo.h5" Class="mb-3">Categories</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.subtitle1">@(_edit.Id_Category == 0 ? "New category" : "Edit category")</MudText>
+    <MudTextField @bind-Value="_edit.CategoryName" Label="Category name" MaxLength="50" />
+    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.Id_Category == 0 ? "Add" : "Update")</MudButton>
+    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+</MudPaper>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Id</MudTh><MudTh>Category</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id_Category</MudTd>
+        <MudTd>@context.CategoryName</MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Category> _items = new();
+    private Category _edit = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try { _items = await Repo.GetCategories(); }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        _loading = false;
+    }
+
+    private void Edit(Category x) => _edit = new Category { Id_Category = x.Id_Category, CategoryName = x.CategoryName };
+    private void Cancel() => _edit = new Category();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.CategoryName))
+        {
+            Snackbar.Add("Category name is required.", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await Repo.SaveCategory(_edit);
+            Snackbar.Add("Saved.", Severity.Success);
+            _edit = new Category();
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private async Task Delete(Category x)
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete category '{x.CategoryName}'?", yesText: "Delete", cancelText: "Cancel");
+        if (ok != true) return;
+        try
+        {
+            await Repo.DeleteCategory(x.Id_Category);
+            Snackbar.Add("Deleted.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+}

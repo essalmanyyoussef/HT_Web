@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 <MudThemeProvider />
 <MudPopoverProvider />
 <MudDialogProvider />
@@ -11,6 +11,11 @@
     <MudDrawer @bind-Open="_open" Elevation="1">
         <MudNavMenu>
             <MudNavLink Href="/" Match="NavLinkMatch.All">Home</MudNavLink>
+            <MudNavLink Href="/sites">Sites</MudNavLink>
+            <MudNavLink Href="/functions">Functions</MudNavLink>
+            <MudNavLink Href="/categories">Categories</MudNavLink>
+            <MudNavLink Href="/courses">Courses</MudNavLink>
+            <MudNavLink Href="/employees">Employees</MudNavLink>
         </MudNavMenu>
     </MudDrawer>
     <MudMainContent>

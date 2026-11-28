@@ -1,0 +1,136 @@
+@page "/employees"
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<PageTitle>Employees</PageTitle>
+<MudText Typo="Typo.h5" Class="mb-3">Employees</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudText Typo="Typo.subtitle1">@(_edit.ID_employe == 0 ? "New employee" : "Edit employee")</MudText>
+    <MudTextField @bind-Value="_edit.Name" Label="Name" MaxLength="50" />
+    <MudTextField @bind-Value="_edit.Username" Label="Username" MaxLength="50" />
+    <MudTextField @bind-Value="_edit.EmailAddress" Label="Email" MaxLength="100" />
+    <MudSelect T="int" @bind-Value="_edit.Id_site" Label="Site">
+        @foreach (var s in _sites)
+        {
+            <MudSelectItem T="int" Value="@s.Id_site">@s.SiteName</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSelect T="int" @bind-Value="_edit.Id_Function" Label="Function">
+        @foreach (var f in _funcs)
+        {
+            <MudSelectItem T="int" Value="@f.Id_Function">@f.FunctionName</MudSelectItem>
+        }
+    </MudSelect>
+    <MudDatePicker @bind-Date="_hire" Label="Hire date" />
+    <MudDatePicker @bind-Date="_leave" Label="Leave date (optional)" />
+    <MudSwitch T="bool" @bind-Value="_edit.IsActive" Label="Active" Color="Color.Primary" />
+    <MudButton Class="mt-3 mr-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">@(_edit.ID_employe == 0 ? "Add" : "Update")</MudButton>
+    <MudButton Class="mt-3" Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+</MudPaper>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>Id</MudTh><MudTh>Name</MudTh><MudTh>Username</MudTh><MudTh>Site</MudTh><MudTh>Function</MudTh>
+        <MudTh>Hired</MudTh><MudTh>Left</MudTh><MudTh>Active</MudTh><MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.ID_employe</MudTd>
+        <MudTd>@context.Name</MudTd>
+        <MudTd>@context.Username</MudTd>
+        <MudTd>@context.SiteName</MudTd>
+        <MudTd>@context.FunctionName</MudTd>
+        <MudTd>@context.Date_emp.ToString("yyyy-MM-dd")</MudTd>
+        <MudTd>@(context.Date_Leave?.ToString("yyyy-MM-dd"))</MudTd>
+        <MudTd>@(context.IsActive ? "Yes" : "No")</MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => Edit(context))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Employee> _items = new();
+    private List<Site> _sites = new();
+    private List<FunctionItem> _funcs = new();
+    private Employee _edit = new();
+    private DateTime? _hire = DateTime.Today;
+    private DateTime? _leave;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _loading = true;
+        try
+        {
+            _sites = await Repo.GetSites();
+            _funcs = await Repo.GetFunctions();
+            _items = await Repo.GetEmployees();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+        _loading = false;
+    }
+
+    private void Edit(Employee x)
+    {
+        _edit = new Employee
+        {
+            ID_employe = x.ID_employe, Name = x.Name, Id_site = x.Id_site, EmailAddress = x.EmailAddress,
+            Username = x.Username, Id_Function = x.Id_Function, IsActive = x.IsActive
+        };
+        _hire = x.Date_emp;
+        _leave = x.Date_Leave;
+    }
+
+    private void Cancel()
+    {
+        _edit = new Employee();
+        _hire = DateTime.Today;
+        _leave = null;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_edit.Name) || string.IsNullOrWhiteSpace(_edit.Username)
+            || _edit.Id_site == 0 || _edit.Id_Function == 0 || _hire == null)
+        {
+            Snackbar.Add("Name, username, site, function and hire date are required.", Severity.Warning);
+            return;
+        }
+        if (_leave != null && _leave < _hire)
+        {
+            Snackbar.Add("Leave date cannot be before the hire date.", Severity.Warning);
+            return;
+        }
+        _edit.Date_emp = _hire.Value;
+        _edit.Date_Leave = _leave;
+        if (string.IsNullOrWhiteSpace(_edit.EmailAddress)) _edit.EmailAddress = null;
+        try
+        {
+            await Repo.SaveEmployee(_edit);
+            Snackbar.Add("Saved.", Severity.Success);
+            Cancel();
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    private async Task Delete(Employee x)
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Delete", $"Delete employee '{x.Name}'?", yesText: "Delete", cancelText: "Cancel");
+        if (ok != true) return;
+        try
+        {
+            await Repo.DeleteEmployee(x.ID_employe);
+            Snackbar.Add("Deleted.", Severity.Success);
+            await Load();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+}
