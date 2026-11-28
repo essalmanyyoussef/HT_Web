@@ -28,7 +28,7 @@
             <MudTh>Function</MudTh>
             <MudTh>Hired</MudTh>
             <MudTh>Status</MudTh>
-            <MudTh Style="width:110px"></MudTh>
+            <MudTh Style="width:150px"></MudTh>
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Employee">
@@ -54,6 +54,7 @@
                 }
             </MudTd>
             <MudTd>
+                <MudTooltip Text="Assign courses"><MudIconButton Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" Color="Color.Secondary" Href="@($"/assign-courses/{context.ID_employe}")" /></MudTooltip>
                 <MudTooltip Text="Edit"><MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => Edit(context))" /></MudTooltip>
                 <MudTooltip Text="Delete"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => Delete(context))" /></MudTooltip>
             </MudTd>

@@ -27,6 +27,13 @@ public class Course
     public string? CategoryName { get; set; }
 }
 
+public class EmployeeCourse
+{
+    public int ID_employe { get; set; }
+    public int ID_Course { get; set; }
+    public DateTime Date_affect { get; set; }
+}
+
 public class Employee
 {
     public int ID_employe { get; set; }

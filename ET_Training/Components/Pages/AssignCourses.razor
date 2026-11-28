@@ -1,0 +1,200 @@
+@page "/assign-courses"
+@page "/assign-courses/{EmployeeId:int}"
+@using ET_Training.Data
+@using ET_Training.Models
+@inject TrainingRepository Repo
+@inject ISnackbar Snackbar
+
+<PageTitle>Assign courses - ET Training</PageTitle>
+
+<div class="d-flex align-center flex-wrap gap-3 mb-4">
+    <div class="mr-auto d-flex align-center">
+        <MudIcon Icon="@Icons.Material.Filled.AssignmentInd" Color="Color.Primary" Size="Size.Large" Class="mr-2" />
+        <div>
+            <MudText Typo="Typo.h5"><b>Assign courses</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Pick an employee, tick the courses, save</MudText>
+        </div>
+    </div>
+    <MudTextField @bind-Value="_search" Placeholder="Search a course..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="max-width:280px" />
+</div>
+
+@if (_tableMissing)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4">
+        The table <b>tbl_employe_course</b> does not exist yet in the database.
+        Run the script <b>create_employee_courses.sql</b> once in SQL Server, then reload this page.
+    </MudAlert>
+}
+
+<MudPaper Elevation="3" Class="rounded-lg pa-4 mb-4">
+    <MudSelect T="int" Value="_selectedId" ValueChanged="OnEmployeeChanged" Label="Employee" Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter">
+        @foreach (var e in _employees)
+        {
+            <MudSelectItem T="int" Value="@e.ID_employe">@e.Name (@e.SiteName)</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (_emp != null)
+    {
+        <MudDivider Class="my-4" />
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">NAME</MudText>
+                <MudText Typo="Typo.body1"><b>@_emp.Name</b></MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">USERNAME</MudText>
+                <MudText Typo="Typo.body1">@_emp.Username</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">EMAIL</MudText>
+                <MudText Typo="Typo.body1">@(string.IsNullOrEmpty(_emp.EmailAddress) ? "-" : _emp.EmailAddress)</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">SITE</MudText>
+                <MudText Typo="Typo.body1">@_emp.SiteName</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">HIRE DATE</MudText>
+                <MudText Typo="Typo.body1">@_emp.Date_emp.ToString("yyyy-MM-dd")</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">LEAVE DATE</MudText>
+                <MudText Typo="Typo.body1">@(_emp.Date_Leave?.ToString("yyyy-MM-dd") ?? "-")</MudText>
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+
+@if (_emp != null && !_tableMissing)
+{
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+    }
+
+    @foreach (var g in FilteredGroups)
+    {
+        <MudPaper Elevation="3" Class="rounded-lg pa-4 mb-4">
+            <div class="d-flex align-center mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Category" Color="Color.Secondary" Class="mr-2" />
+                <MudText Typo="Typo.subtitle1" Class="mr-2"><b>@g.Key</b></MudText>
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">@g.Count(c => _checked.Contains(c.ID_Course))/@g.Count() selected</MudChip>
+                <MudSpacer />
+                <MudCheckBox T="bool" Value="@g.All(c => _checked.Contains(c.ID_Course))" ValueChanged="@((bool v) => ToggleGroup(g, v))" Label="All" Color="Color.Secondary" Dense="true" />
+            </div>
+            <MudGrid Spacing="1">
+                @foreach (var c in g)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCheckBox T="bool" Value="@(_checked.Contains(c.ID_Course))" ValueChanged="@((bool v) => Toggle(c.ID_Course, v))" Label="@c.CourseName" Color="Color.Primary" Dense="true" />
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @if (!FilteredGroups.Any())
+    {
+        <MudText Color="Color.Secondary">No courses match the search.</MudText>
+    }
+
+    <div class="d-flex align-center gap-3 mt-2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="Save" Disabled="_saving">@(_saving ? "Saving..." : "Save assignments")</MudButton>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@_checked.Count course(s) selected</MudText>
+    </div>
+}
+
+@code {
+    [Parameter] public int? EmployeeId { get; set; }
+
+    private List<Employee> _employees = new();
+    private List<Course> _courses = new();
+    private HashSet<int> _checked = new();
+    private Employee? _emp;
+    private int _selectedId;
+    private int _loadedId;
+    private string _search = "";
+    private bool _loading;
+    private bool _saving;
+    private bool _tableMissing;
+
+    private IEnumerable<IGrouping<string, Course>> FilteredGroups => _courses
+        .Where(c => string.IsNullOrWhiteSpace(_search) || c.CourseName.Contains(_search, StringComparison.OrdinalIgnoreCase))
+        .GroupBy(c => c.CategoryName ?? "Other")
+        .OrderBy(g => g.Key);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _employees = await Repo.GetEmployees();
+            _courses = await Repo.GetCourses();
+        }
+        catch (Exception ex) { Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error); }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (EmployeeId is int id && id != _loadedId && _employees.Any(e => e.ID_employe == id))
+        {
+            _loadedId = id;
+            await OnEmployeeChanged(id);
+        }
+    }
+
+    private async Task OnEmployeeChanged(int id)
+    {
+        _selectedId = id;
+        _emp = _employees.FirstOrDefault(e => e.ID_employe == id);
+        _checked = new();
+        _tableMissing = false;
+        if (_emp == null) return;
+        _loading = true;
+        try
+        {
+            _checked = await Repo.GetAssignedCourseIds(id);
+        }
+        catch (Exception ex)
+        {
+            if (IsMissingTable(ex))
+                _tableMissing = true;
+            else
+                Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private void Toggle(int courseId, bool on)
+    {
+        if (on) _checked.Add(courseId);
+        else _checked.Remove(courseId);
+    }
+
+    private void ToggleGroup(IEnumerable<Course> group, bool on)
+    {
+        foreach (var c in group) Toggle(c.ID_Course, on);
+    }
+
+    private async Task Save()
+    {
+        if (_emp == null) return;
+        _saving = true;
+        try
+        {
+            await Repo.SaveEmployeeCourses(_emp.ID_employe, _checked);
+            Snackbar.Add($"Saved: {_checked.Count} course(s) assigned to {_emp.Name}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            if (IsMissingTable(ex))
+                _tableMissing = true;
+            else
+                Snackbar.Add(TrainingRepository.Explain(ex), Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private static bool IsMissingTable(Exception ex) =>
+        ex.Message.Contains("tbl_employe_course", StringComparison.OrdinalIgnoreCase);
+}

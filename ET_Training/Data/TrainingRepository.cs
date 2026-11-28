@@ -131,6 +131,24 @@ public class TrainingRepository
         await c.ExecuteAsync("DELETE FROM dbo.tbl_employe WHERE ID_employe=@id", new { id });
     }
 
+    // ---------- Course assignments ----------
+    public async Task<HashSet<int>> GetAssignedCourseIds(int employeeId)
+    {
+        using var c = Open();
+        var rows = await c.QueryAsync<int>("SELECT ID_Course FROM dbo.tbl_employe_course WHERE ID_employe=@employeeId", new { employeeId });
+        return rows.ToHashSet();
+    }
+    public async Task SaveEmployeeCourses(int employeeId, IReadOnlyCollection<int> courseIds)
+    {
+        using var c = Open();
+        c.Open();
+        using var tx = c.BeginTransaction();
+        await c.ExecuteAsync("DELETE FROM dbo.tbl_employe_course WHERE ID_employe=@employeeId", new { employeeId }, tx);
+        foreach (var id in courseIds)
+            await c.ExecuteAsync("INSERT INTO dbo.tbl_employe_course (ID_employe, ID_Course) VALUES (@employeeId, @id)", new { employeeId, id }, tx);
+        tx.Commit();
+    }
+
     /// <summary>Turns SQL errors into a short readable message.</summary>
     public static string Explain(Exception ex)
     {
